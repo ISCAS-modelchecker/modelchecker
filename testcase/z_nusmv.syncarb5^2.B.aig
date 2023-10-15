@@ -1,0 +1,34 @@
+aig 67 5 10 1 52
+34
+18
+38
+22
+42
+26
+46
+31
+50
+15
+135
+!#%' *(	#9A	C=O
+K"[
+W0i"	%)3i0 e5_o_Request
+i1 e4_o_Request
+i2 e3_o_Request
+i3 e2_o_Request
+i4 e1_o_Request
+l0 e5_o_Persistent
+l1 e5_o_Token
+l2 e4_o_Persistent
+l3 e4_o_Token
+l4 e3_o_Persistent
+l5 e3_o_Token
+l6 e2_o_Persistent
+l7 e2_o_Token
+l8 e1_o_Persistent
+l9 AIGER_NOT_e1_o_Token
+o0 AIGER_NEVER
+c
+smvtoaig
+20061129
+../unmangled/nusmv.syncarb5^2.B.smv

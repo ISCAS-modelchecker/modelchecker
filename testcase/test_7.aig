@@ -1,0 +1,13 @@
+aig 6 0 5 1 1
+1
+6
+11
+1
+1
+12
+l0 e3_o_Persistent
+l1 e3_o_Token
+l2 e2_o_Token
+l3 e1_o_Persistent
+l4 AIGER_NOT_e1_o_Token
+o0 AIGER_NEVER
