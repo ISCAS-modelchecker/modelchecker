@@ -196,6 +196,7 @@ int Internal::cdcl_loop_with_inprocessing () {
   else        { START (unstable); report ('{'); }
 
   while (!res) {
+    //if bmc slower than pdr, bt(0) res=20
          if (unsat) res = 20;
     else if (unsat_constraint) res = 20;
     else if (!propagate ()) analyze ();      // propagate and analyze

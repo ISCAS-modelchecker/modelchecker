@@ -15,6 +15,8 @@ using namespace std;
 #ifndef TIMESTAMP
 #define TIMESTAMP
     extern unsigned long long state_count;
+    extern int PEBMC_result; // 0 means safe in PEBMC_step; 10 means find a bug; 20 proves safety
+    extern int PEBMC_step;
 #endif
 
 // save information for debug
@@ -236,7 +238,7 @@ public:
     void generalize(Cube &cube, int level);
     bool check_BMC0();
     bool check_BMC1();
-    bool check();
+    int check();
     int incremental_check();
     int incremental_check2();
     

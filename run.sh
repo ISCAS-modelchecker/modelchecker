@@ -5,11 +5,13 @@ make clean;
 make -j;
 
 #/home/zhulf/modelchecker/modelchecker /home/zhulf/modelchecker/test4.aig
-/home/zhulf/PEBMC/modelchecker /home/zhulf/modelchecker/test4_fold.aig
+#/home/zhulf/PEBMC/modelchecker /home/zhulf/modelchecker/test4_fold.aig
+#/home/zhulf/PEBMC/modelchecker  /home/zhulf/modelchecker/testcase/bug_instance/prodcellp0neg.aag
+#/home/zhulf/PEBMC/modelchecker /home/zhulf/data/MC/hwmcc2020-abc/data/dspfilters_fastfir_second-p10.aig #跳步不propagate会导致pdr无解
+/home/zhulf/PEBMC/modelchecker /home/zhulf/data/MC/hwmcc2020-abc/data/krebs.3.prop1-func-interl.aig #bmc很快但pdr会卡死在某一步
+#/home/zhulf/PEBMC/modelchecker /home/zhulf/data/MC/hwmcc2017-abc/data/6s41.aig
 
-#/home/zhulf/modelchecker/modelchecker  /home/zhulf/modelchecker/testcase/bug_instance/prodcellp0neg.aag
-#/home/zhulf/modelchecker/modelchecker  /home/zhulf/data/MC/hwmcc2020/data/dspfilters_fastfir_second-p05.aig
-#time /home/zhulf/modelchecker/modelchecker /home/zhulf/data/MC/hwmcc2020-abc/data/zipcpu-busdelay-p36.aig   # mic(cube)特别长 每次drop一个literal很慢
+#time /home/zhulf/PEBMC/modelchecker /home/zhulf/data/MC/hwmcc2020-abc/data/zipcpu-busdelay-p36.aig   # mic(cube)特别长 每次drop一个literal很慢
 #time /home/zhulf/modelchecker/modelchecker /home/zhulf/data/MC/hwmcc2020-abc/data/frogs.5.prop1-func-interl.aig
 #time /home/zhulf/modelchecker/modelchecker /home/zhulf/data/MC/hwmcc2020-abc/data/zipcpu-zipmmu-p39.aig
 

@@ -5,6 +5,8 @@
 #include <algorithm>
 
 unsigned long long state_count = 0;
+int PEBMC_result = 0; // 0 means safe in PEBMC_step; 10 means find a bug; 20 proves safety
+int PEBMC_step = 0;
 
 //  Log functions
 // --------------------------------------------
@@ -1016,16 +1018,18 @@ bool PDR::check_BMC1(){
     return true;
 }
 
-bool PDR::check(){
+int PDR::check(){
     initialize();
 
     if(!check_BMC0()) {
         cout << "check BMC0 failed" << endl;
-        return 1;
+        PEBMC_result = 10; 
+        return 10;
     }
     if(!check_BMC1()) {
         cout << "check BMC1 failed" << endl;
-        return 1;
+        PEBMC_result = 10; 
+        return 10;
     }
 
     // main loop of IC3, start from depth = 1.
@@ -1034,9 +1038,10 @@ bool PDR::check(){
     assert(depth() == 1);
     top_frame_cannot_reach_bad = true;
     earliest_strengthened_frame = depth();
-    int result = true;
+    int result = 10;
     int ct = 0;
     while(true){
+        if(PEBMC_result!=0) return PEBMC_result; //PDR pursue BMC
         if(output_stats_for_others)
             cout<<"\n\n----------------LEVEL "<< depth() << "----------------------\n";
 
@@ -1050,8 +1055,9 @@ bool PDR::check(){
             top_frame_cannot_reach_bad = false;
             if(!rec_block_cube()){
                 // find counter-example
-                result = 1;
+                result = 10;
                 show_witness();
+                PEBMC_result = 10; 
                 break;
             }else{
                 for(State *p : states) delete p;
@@ -1063,7 +1069,8 @@ bool PDR::check(){
             if(output_stats_for_frames and int(frames.size()) < output_frame_size)  show_frames();
             if(propagate()){
                 // find invariants
-                result = 0;
+                result = 20;
+                PEBMC_result = 20; 
                 break;
             }
             if(output_stats_for_conclusion){
@@ -1079,6 +1086,35 @@ bool PDR::check(){
             new_frame();
             top_frame_cannot_reach_bad = true;
             earliest_strengthened_frame = depth();
+            cout << "pdr_step = " << depth() << endl;
+            
+            //PDR pursue BMC (when BMC_step > PDR_step && PDR_step > 5)
+            int step_sub = min(PEBMC_step-depth()-2, 1);
+            //cout << step_sub << endl;
+            // // // for(int count = 1; count <= step_sub; count++){  
+            // // //     int temp = depth();
+            // // //     for(auto ci = frames[temp].cubes.begin(); ci!=frames[temp].cubes.end();){
+            // // //         if(is_inductive(frames[temp].solver, *ci, true)){
+            // // //             // should add to frame k+1
+            // // //             if(core.size() < ci->size())
+            // // //                 add_cube(core, temp+1, true, true);
+            // // //             else
+            // // //                 add_cube(core, temp+1, false, true);
+            // // //             auto rm = ci++;
+            // // //             frames[temp].cubes.erase(rm);
+                        
+            // // //         }else{
+            // // //             ci++;  
+            // // //         } 
+            // // //     }
+            // // //     // 有bug
+            // // //     // if(frames[temp].cubes.size() == 0){
+            // // //     //     PEBMC_result = 20; 
+            // // //     //     return 20;
+            // // //     // }     
+            // // //     new_frame();
+            // // //     top_frame_cannot_reach_bad = true;
+            // // // }
         }
     }
     cout << "depth = " << depth() << endl;

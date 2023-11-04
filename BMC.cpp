@@ -393,12 +393,13 @@ void BMC::initialize(){
 int BMC::check(){
     int res;
     for(bmc_frame_k = 1; bmc_frame_k <= nframes; bmc_frame_k++){
+        if(PEBMC_result!=0) return PEBMC_result;
         unfold();
         res = solve_one_frame();
         if (res == 10) {
             uaiger->show_statistics();
             cout << "Output was asserted in frame." << endl;
-            return 1;
+            return 10;
         }   
     } 
     // res = 0
@@ -410,7 +411,7 @@ int BMC::check(){
 // check one frame
 int BMC::solve_one_frame(){
     int bad = (uaiger->outputs).back();
-    cout << "frames = "<< bmc_frame_k <<", bad = " << bad << ", res = ";
+    //cout << "frames = "<< bmc_frame_k <<", bad = " << bad << ", res = ";
 
     set<int> lit_set;
     lit_set.insert(abs(bad));
@@ -435,13 +436,16 @@ int BMC::solve_one_frame(){
 
     bmcSolver->assume(bad);
     int result = bmcSolver->solve();
+    if(PEBMC_step < bmc_frame_k) PEBMC_step = bmc_frame_k;
     if(result == 20){
-        cout << result << endl;
+        if(bmc_frame_k < 10 || bmc_frame_k % 20 == 0) cout << "frames = "<< bmc_frame_k <<", bad = " << bad << ", res = " << result << endl;
         bmcSolver->add(-bad); bmcSolver->add(0); 
     } 
     else if(result == 10){
-        cout << result << endl;      
+        cout << "frames = "<< bmc_frame_k <<", bad = " << bad << ", res = " << result << endl;
+        PEBMC_result = 10;     
     }
     else cout << "???" << result << endl;
+    //cout << "PEBMC_step = " << PEBMC_step << endl;
     return result;
 }
