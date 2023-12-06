@@ -45,8 +45,8 @@ int main(int argc, char **argv){
     }
          
     pthread_t tbmc, tpdr;
-    int ret = pthread_create (&tbmc, NULL, thread_start_bmc, (void *)aiger);  
-    int ret2 = pthread_create (&tpdr, NULL, thread_start_pdr, (void *)aiger);  
+    int ret = pthread_create (&tbmc, NULL, thread_start_bmc, (void *)aiger);  //int ret = pthread_create (&tbmc, NULL, thread_start_bmc, (void *)aiger);  
+    int ret2 = pthread_create (&tpdr, NULL, thread_start_pdr, (void *)aiger);  //int ret2 = pthread_create (&tpdr, NULL, thread_start_pdr, (void *)aiger);  
     pthread_join(tbmc, NULL);
     pthread_join(tpdr, NULL);
     if(PEBMC_result  == 10)

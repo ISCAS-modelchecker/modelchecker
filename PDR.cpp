@@ -7,6 +7,7 @@
 unsigned long long state_count = 0;
 int PEBMC_result = 0; // 0 means safe in PEBMC_step; 10 means find a bug; 20 proves safety
 int PEBMC_step = 0;
+int* proof_obligation = new int[99999];
 
 //  Log functions
 // --------------------------------------------
@@ -361,8 +362,8 @@ void PDR::add_cube(Cube &cube, int k, bool to_all, bool ispropagate){
         frames[k].solver->add(-l);
     frames[k].solver->add(0);
     
-    // update heuristics
-    if(use_heuristic and !ispropagate) updateLitOrder(cube, k);
+    // update heuristics igoodlemma
+    if(use_heuristic and ispropagate) updateLitOrder(cube, k);
 }
 
 
@@ -737,7 +738,7 @@ bool PDR::rec_block_cube(){
             // latches is inductive to Fk
             obligation_queue.erase(obligation_queue.begin());
             
-            Cube tmp_core = core;
+            Cube tmp_core = core, tmp_core2 = obl.state->latches;
             generalize(tmp_core, obl.frame_k);
             if(output_stats_for_recblock){
                 cout << "the cube is generalized to ";
@@ -765,8 +766,14 @@ bool PDR::rec_block_cube(){
             }
             add_cube(tmp_core, k, true);
 
+            // if(k < PEBMC_step - obl.depth -5 and tmp_core2.size()==tmp_core.size()) { //PDR pursue BMC 3
+            //     cout << "111" << endl;
+            //     int k2 = min(PEBMC_step - obl.depth -5, depth()+1);
+            //     add_cube(tmp_core2, k2, true);
+            // }
+                
             if(k <= depth())
-                obligation_queue.insert(Obligation(obl.state, k, obl.depth)); 
+               obligation_queue.insert(Obligation(obl.state, k, obl.depth)); 
         }else{
             if(((obl.state)->failed_depth) and ((obl.state)->failed_depth) <= obl.depth + obl.frame_k){
                 obligation_queue.erase(obligation_queue.begin());
@@ -783,7 +790,12 @@ bool PDR::rec_block_cube(){
                 }
                 continue;
             }
-            
+
+            // if(obl.depth + obl.frame_k > depth()+200) {          //PDR pursue BMC 4
+            //     obligation_queue.erase(obligation_queue.begin());
+            //     continue; 
+            // }
+
             State *s = new State();
             ++nCTI;
             extract_state_from_sat(sat, s, obl.state);
@@ -793,6 +805,14 @@ bool PDR::rec_block_cube(){
                 log_witness();
                 return false;
             }else{
+                //if (PEBMC_step-depth()-2 > 0  and obl.depth + obl.frame_k == depth()) //PDR pursue BMC 5
+                //    add_cube(s->latches, obl.frame_k, true);
+                // if(PEBMC_step-depth()-2 > 0  and depth() % 2==1 and obl.depth > 20){ //PDR pursue BMC 6
+                //     if(obl.depth + obl.frame_k == depth()){
+                //         add_cube(s->latches, obl.frame_k, true);  
+                //         continue;      
+                //     } 
+                // }
                 obligation_queue.insert(Obligation(s, obl.frame_k - 1, obl.depth + 1));
             }
         }
@@ -820,6 +840,14 @@ bool PDR::propagate(){
         int ckeep = 0, cprop = 0;
         for(auto ci = frames[i].cubes.begin(); ci!=frames[i].cubes.end();){
             if(is_inductive(frames[i].solver, *ci, true)){
+                //pursue igoodlemma
+                //Cube tempcube = *ci;
+                //updateLitOrder(tempcube, 0);
+                // for(int index: tempcube){
+                //     //cout << abs(index) << " ";
+                //     heuristic_lit_cmp->counts[abs(index)] += 10.0/tempcube.size();   
+                // }
+
                 ++cprop;
                 // should add to frame k+1
                 if(core.size() < ci->size())
@@ -1019,6 +1047,7 @@ bool PDR::check_BMC1(){
 }
 
 int PDR::check(){
+    proof_obligation[0] = 0;
     initialize();
 
     if(!check_BMC0()) {
@@ -1041,7 +1070,7 @@ int PDR::check(){
     int result = 10;
     int ct = 0;
     while(true){
-        if(PEBMC_result!=0) return PEBMC_result; //PDR pursue BMC
+        if(PEBMC_result!=0) return PEBMC_result; //PDR pursue BMC 1
         if(output_stats_for_others)
             cout<<"\n\n----------------LEVEL "<< depth() << "----------------------\n";
 
@@ -1050,6 +1079,15 @@ int PDR::check(){
         bool flag = get_pre_of_bad(s);
         if(flag){
             ++nCTI;
+            //PDR pursue BMC 2
+            //if (PEBMC_step-depth()-2 > 0) 
+            //    add_cube(s->latches, depth(), true); 
+            int i;
+            for(i=0; i<(s->latches).size(); i++){
+                proof_obligation[i] = s->latches[i];
+            }
+            proof_obligation[i] = 0;
+
             obligation_queue.clear();    
             obligation_queue.insert(Obligation(s, depth()-1, 1));
             top_frame_cannot_reach_bad = false;
@@ -1088,33 +1126,34 @@ int PDR::check(){
             earliest_strengthened_frame = depth();
             cout << "pdr_step = " << depth() << endl;
             
-            //PDR pursue BMC (when BMC_step > PDR_step && PDR_step > 5)
-            int step_sub = min(PEBMC_step-depth()-2, 1);
-            //cout << step_sub << endl;
-            // // // for(int count = 1; count <= step_sub; count++){  
-            // // //     int temp = depth();
-            // // //     for(auto ci = frames[temp].cubes.begin(); ci!=frames[temp].cubes.end();){
-            // // //         if(is_inductive(frames[temp].solver, *ci, true)){
-            // // //             // should add to frame k+1
-            // // //             if(core.size() < ci->size())
-            // // //                 add_cube(core, temp+1, true, true);
-            // // //             else
-            // // //                 add_cube(core, temp+1, false, true);
-            // // //             auto rm = ci++;
-            // // //             frames[temp].cubes.erase(rm);
+            // //PDR pursue BMC (when BMC_step > PDR_step && PDR_step > 10)
+            // int step_sub = min(PEBMC_step-depth()-2, 5);
+            // if(depth() < 10) step_sub = 0;
+            // //cout << step_sub << endl;
+            // for(int count = 1; count <= step_sub; count++){  
+            //     int temp = depth();
+            //     for(auto ci = frames[temp].cubes.begin(); ci!=frames[temp].cubes.end();){
+            //         if(is_inductive(frames[temp].solver, *ci, true)){
+            //             // should add to frame k+1
+            //             if(core.size() < ci->size())
+            //                 add_cube(core, temp+1, true, true);
+            //             else
+            //                 add_cube(core, temp+1, false, true);
+            //             auto rm = ci++;
+            //             frames[temp].cubes.erase(rm);
                         
-            // // //         }else{
-            // // //             ci++;  
-            // // //         } 
-            // // //     }
-            // // //     // 有bug
-            // // //     // if(frames[temp].cubes.size() == 0){
-            // // //     //     PEBMC_result = 20; 
-            // // //     //     return 20;
-            // // //     // }     
-            // // //     new_frame();
-            // // //     top_frame_cannot_reach_bad = true;
-            // // // }
+            //         }else{
+            //             ci++;  
+            //         } 
+            //     }
+            //     // 有bug
+            //     // if(frames[temp].cubes.size() == 0){
+            //     //     PEBMC_result = 20; 
+            //     //     return 20;
+            //     // }     
+            //     new_frame();
+            //     top_frame_cannot_reach_bad = true;
+            // }
         }
     }
     cout << "depth = " << depth() << endl;

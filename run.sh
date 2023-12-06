@@ -6,10 +6,10 @@ make -j;
 
 #/home/zhulf/modelchecker/modelchecker /home/zhulf/modelchecker/test4.aig
 #/home/zhulf/PEBMC/modelchecker /home/zhulf/modelchecker/test4_fold.aig
-#/home/zhulf/PEBMC/modelchecker  /home/zhulf/modelchecker/testcase/bug_instance/prodcellp0neg.aag
+/home/zhulf/PEBMC/modelchecker  /home/zhulf/modelchecker/testcase/bug_instance/prodcellp0neg.aag
+#/home/zhulf/PEBMC/modelchecker /home/zhulf/data/MC/hwmcc2020-abc/data/qspiflash_dualflexpress_divthree-p113.aig
 #/home/zhulf/PEBMC/modelchecker /home/zhulf/data/MC/hwmcc2020-abc/data/dspfilters_fastfir_second-p10.aig #跳步不propagate会导致pdr无解
-/home/zhulf/PEBMC/modelchecker /home/zhulf/data/MC/hwmcc2020-abc/data/krebs.3.prop1-func-interl.aig #bmc很快但pdr会卡死在某一步
-#/home/zhulf/PEBMC/modelchecker /home/zhulf/data/MC/hwmcc2017-abc/data/6s41.aig
+#/home/zhulf/PEBMC/modelchecker /home/zhulf/data/MC/hwmcc2020-abc/data/krebs.3.prop1-func-interl.aig #bmc很快但pdr会卡死在某一步
 
 #time /home/zhulf/PEBMC/modelchecker /home/zhulf/data/MC/hwmcc2020-abc/data/zipcpu-busdelay-p36.aig   # mic(cube)特别长 每次drop一个literal很慢
 #time /home/zhulf/modelchecker/modelchecker /home/zhulf/data/MC/hwmcc2020-abc/data/frogs.5.prop1-func-interl.aig
@@ -23,7 +23,5 @@ make -j;
 #time ./modelchecker ./testcase/bug_instance/anderson.3.prop1-back-serstep.aig #秒出
 #time ./modelchecker ./testcase/zipversa_composecrc_prf-p03.aig #在level7死循环
 #time ./modelchecker /home/zhulf/data/MC/hwmcc2020/data/zipversa_composecrc_prf-p22.aig 不化简无法读取
-
-
 
 

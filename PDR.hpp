@@ -17,6 +17,7 @@ using namespace std;
     extern unsigned long long state_count;
     extern int PEBMC_result; // 0 means safe in PEBMC_step; 10 means find a bug; 20 proves safety
     extern int PEBMC_step;
+    extern int* proof_obligation;
 #endif
 
 // save information for debug

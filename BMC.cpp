@@ -391,9 +391,10 @@ void BMC::initialize(){
 
 //check all frames
 int BMC::check(){
+    //proof_obligation[0] = 0;
     int res;
     for(bmc_frame_k = 1; bmc_frame_k <= nframes; bmc_frame_k++){
-        if(PEBMC_result!=0) return PEBMC_result;
+        if(PEBMC_result!=0) return PEBMC_result; // bmc pursue pdr 1
         unfold();
         res = solve_one_frame();
         if (res == 10) {
@@ -411,8 +412,6 @@ int BMC::check(){
 // check one frame
 int BMC::solve_one_frame(){
     int bad = (uaiger->outputs).back();
-    //cout << "frames = "<< bmc_frame_k <<", bad = " << bad << ", res = ";
-
     set<int> lit_set;
     lit_set.insert(abs(bad));
     //for(int cst : constraints) lit_set.insert(abs(cst));
@@ -433,6 +432,18 @@ int BMC::solve_one_frame(){
         bmcSolver->add(-a.o); bmcSolver->add(a.i2);  bmcSolver->add(0);
         bmcSolver->add(a.o);  bmcSolver->add(-a.i1); bmcSolver->add(-a.i2); bmcSolver->add(0);
     }
+
+    // // bmc pursue pdr 2
+    // for(int i=0; i<99999; i++){
+    //     if(proof_obligation[i] != 0)    
+    //         //bmcSolver->add(-value(proof_obligation[i]));
+    //         cout << -value(proof_obligation[i]) << " ";
+    //     else
+    //         break;
+    // }
+    // bmcSolver->add(0);
+
+    // cout << proof_obligation[0] << endl;
 
     bmcSolver->assume(bad);
     int result = bmcSolver->solve();
