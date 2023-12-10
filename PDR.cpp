@@ -339,7 +339,7 @@ void PDR::new_frame(){
 }
 
 int add_ct = 0;
-void PDR::add_cube(Cube &cube, int k, bool to_all, bool ispropagate){
+void PDR::add_cube(Cube &cube, int k, bool to_all, bool ispropagate, int isigoodlemma){
     if(!ispropagate) 
         earliest_strengthened_frame =min(earliest_strengthened_frame,k);
     sort(cube.begin(), cube.end(), Lit_CMP());
@@ -362,8 +362,15 @@ void PDR::add_cube(Cube &cube, int k, bool to_all, bool ispropagate){
         frames[k].solver->add(-l);
     frames[k].solver->add(0);
     
-    // update heuristics igoodlemma
-    if(use_heuristic and ispropagate) updateLitOrder(cube, k);
+    // update heuristics igoodlemma 
+    if(use_heuristic and use_heuristic_igoodlemma){
+        while(isigoodlemma){
+            updateLitOrder(cube, k);
+            isigoodlemma--;
+        }
+    }
+    else if(use_heuristic and !ispropagate) 
+        updateLitOrder(cube, k);
 }
 
 
@@ -764,7 +771,7 @@ bool PDR::rec_block_cube(){
                     break;
                 }
             }
-            add_cube(tmp_core, k, true);
+            add_cube(tmp_core, k, true, false, k - obl.frame_k + (tmp_core.size() < core.size()));
 
             // if(k < PEBMC_step - obl.depth -5 and tmp_core2.size()==tmp_core.size()) { //PDR pursue BMC 3
             //     cout << "111" << endl;
@@ -851,9 +858,9 @@ bool PDR::propagate(){
                 ++cprop;
                 // should add to frame k+1
                 if(core.size() < ci->size())
-                    add_cube(core, i+1, true, true);
+                    add_cube(core, i+1, true, true, 1);
                 else
-                    add_cube(core, i+1, false, true);
+                    add_cube(core, i+1, false, true, 0);
                 auto rm = ci++;
                 frames[i].cubes.erase(rm);
                 
@@ -875,16 +882,30 @@ void PDR::mic(Cube &cube, int k, int depth){
     ++nmic;
     int mic_failed = 0;
     set<int> required;
+    if(refer_skip || !use_heuristic) sort(cube.begin(), cube.end(), Lit_CMP());
+
+    //refer skip
+    vector<int> blocker;
+    blocker.clear();
+    if(refer_skip){
+        for(auto ci = frames[k].cubes.begin(); ci!=frames[k].cubes.end(); ci++){
+            Cube block_lemma = *ci;
+            if (includes(cube.begin(), cube.end(), block_lemma.begin(), block_lemma.end())) {
+                blocker.swap(block_lemma);
+                break;  
+            }
+        }
+    }
+    
+    //drop literal
     if(use_heuristic){
         stable_sort(cube.begin(), cube.end(), *heuristic_lit_cmp);
     }
-    else
-        sort(cube.begin(), cube.end(), Lit_CMP());
-
     Cube tmp_cube = cube;
     for(int l : tmp_cube){     
         vector<int> cand;
         if(find(cube.begin(), cube.end(), l) == cube.end()) {mic_failed = 0; continue;}
+        if(refer_skip and find(blocker.begin(), blocker.end(), l) != blocker.end()) continue;
         for(int i : cube){
             if(i != l)
                 cand.push_back(i);
@@ -956,8 +977,9 @@ bool PDR::CTG_down(Cube &cube, int k, int rec_depth, set<int> &required){
                     if(!is_inductive(frames[i].solver, ctg, false))
                         break;
                 }
+                int Size =  ctg.size();
                 mic(ctg, i-1, rec_depth+1);
-                add_cube(ctg, i, true);
+                add_cube(ctg, i, true, false, i-k+1 + (ctg.size() < Size));
             }else{
                 if(join_ct < option_max_joins){
                     ctg_ct=0;

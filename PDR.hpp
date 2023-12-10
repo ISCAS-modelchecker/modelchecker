@@ -250,7 +250,7 @@ public:
     
 
     void clear_po();
-    void add_cube(Cube &cube, int k, bool to_all=true, bool ispropagate = false);
+    void add_cube(Cube &cube, int k, bool to_all=true, bool ispropagate = false, int isigoodlemma = 0);
     int  depth(){return frames.size() - 2;}
     bool cube_is_null(Cube &c){return c.size() == 0;}
     bool state_is_null(State *s){return s->latches.size() == 0;}

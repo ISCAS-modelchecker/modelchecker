@@ -21,6 +21,9 @@
 #define unfold_ands 0
 #define unfold_latches 0
 #define output_aigand 0
+
+#define use_heuristic_igoodlemma 1
+#define refer_skip 1
  
 class Literal{
 public:
