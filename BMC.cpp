@@ -394,7 +394,7 @@ int BMC::check(){
     //proof_obligation[0] = 0;
     int res;
     for(bmc_frame_k = 1; bmc_frame_k <= nframes; bmc_frame_k++){
-        if(PEBMC_result!=0) return PEBMC_result; // bmc pursue pdr 1
+        if(RESULT!=0) return RESULT; // bmc pursue pdr 1
         unfold();
         res = solve_one_frame();
         if (res == 10) {
@@ -447,14 +447,14 @@ int BMC::solve_one_frame(){
 
     bmcSolver->assume(bad);
     int result = bmcSolver->solve();
-    if(PEBMC_step < bmc_frame_k) PEBMC_step = bmc_frame_k;
+    //if(PEBMC_step < bmc_frame_k) PEBMC_step = bmc_frame_k;
     if(result == 20){
         if(bmc_frame_k < 10 || bmc_frame_k % 20 == 0) cout << "frames = "<< bmc_frame_k <<", bad = " << bad << ", res = " << result << endl;
         bmcSolver->add(-bad); bmcSolver->add(0); 
     } 
     else if(result == 10){
         cout << "frames = "<< bmc_frame_k <<", bad = " << bad << ", res = " << result << endl;
-        PEBMC_result = 10;     
+        RESULT = 10;     
     }
     else cout << "???" << result << endl;
     //cout << "PEBMC_step = " << PEBMC_step << endl;

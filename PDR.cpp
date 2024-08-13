@@ -5,9 +5,10 @@
 #include <algorithm>
 
 unsigned long long state_count = 0;
-int PEBMC_result = 0; // 0 means safe in PEBMC_step; 10 means find a bug; 20 proves safety
-int PEBMC_step = 0;
-int* proof_obligation = new int[99999];
+int RESULT = 0; // 0 means safe in PORTFOLIO; 10 means find a bug; 20 proves safety
+int max_step = 0;
+LockFreeQueue<Cube> shared_clauses[8][1000]; //记录新学习得到的需要被加入threadi的所有frame的子句
+LockFreeQueue<Cube> tolast_shared_clauses[8][1000]; //记录新学习得到的需要被加入threadi最后一frame的子句
 
 //  Log functions
 // --------------------------------------------
@@ -28,6 +29,24 @@ void PDR::show_state(State *s){
     cout<<endl;
 }
 
+string PDR::return_state(State *s){
+    vector<char> a(nInputs + nLatches + 2, 'x');
+    for(int i : s->inputs)
+        a[abs(i)] = (i<0?'0':'1');
+    for(int l : s->latches)
+        a[abs(l)] = (l<0?'0':'1');
+    
+    string str="";
+    str.push_back('[');
+    for(int i=1; i<=nInputs; ++i)
+        str.push_back(a[1+i]);
+    str.push_back('|');
+    for(int l=1; l<=nLatches; ++l)
+        str.push_back(a[1+nInputs+l]);
+    str.push_back(']');
+    return str;
+}
+
 void PDR::show_lit(int l) const{
     cout<<(l<0?"-":"")<<variables[abs(l)].name;
 }
@@ -37,6 +56,16 @@ void PDR::show_litvec(vector<int> &lv) const{
         show_lit(l);
         cout<<" ";
     }cout<<endl;
+}
+
+string PDR::return_litvec(vector<int> &lv) const{
+    string str = "";
+    for(int l:lv){
+        str.append(l<0?"-":"");
+        str.append(variables[abs(l)].name);
+        str.push_back(' ');
+    }
+    return str;
 }
 
 double PDR::get_runtime(){
@@ -62,10 +91,10 @@ void PDR::log_witness(){
 
 void PDR::show_witness(){
     bool need_delete = true;
-    cout<<"c CEX witness:"<<endl;
+    cout<<"c CEX witness:\n";
     assert(find_cex);
     for(auto s : cex_states){
-        show_state(s);
+        cout << return_state(s) + "\n";
         if(need_delete){
             delete s;
         }
@@ -323,7 +352,7 @@ void PDR::initialize(){
     initialize_heuristic();
 
     nQuery = nCTI = nCTG = nmic = nCoreReduced = nAbortJoin = nAbortMic = 0;
-    cout<<"c PDR constructed from aiger file [Finished] "<<endl; 
+    cout<<"c PDR constructed from aiger file [Finished] \n"; 
 }
 
 
@@ -345,6 +374,19 @@ void PDR::add_cube(Cube &cube, int k, bool to_all, bool ispropagate, int isigood
     sort(cube.begin(), cube.end(), Lit_CMP());
     pair<set<Cube, Cube_CMP>::iterator, bool> rv = frames[k].cubes.insert(cube);
     if(!rv.second) return;
+
+    if(share_memory and thread_index!=0 and k) { //and cube.size()<5 and isigoodlemma and 
+        //cout << "thread" + to_string(thread_index) + " enqueue " + return_litvec(cube) +"\n";
+        if(k>999) k=999;
+        if(to_all){
+            shared_clauses[0][k].Enqueue(cube);
+            if(more_main_thread) shared_clauses[3][k].Enqueue(cube);
+        }
+        else {
+            tolast_shared_clauses[0][k].Enqueue(cube);
+            if(more_main_thread) tolast_shared_clauses[3][k].Enqueue(cube);
+        }
+    }    
 
     if(output_stats_for_addcube and !ispropagate) {
         cout<<"add Cube: (sz"<<cube.size()<<") to "<<k<<" : ";
@@ -684,17 +726,22 @@ void PDR::extract_state_from_sat(SATSolver *sat, State *s, State *succ){
         cout << endl;
     }
 
-    int core_literal = 0;
-    for(int i=0; i<assumptions.size(); i++){
-        int l = assumptions[i];
-        if(lift->failed(l)){
-            double score = (i-core_literal)/20.0;
-            if(score > 1.0) score = 1.05;
-            if(abs(l) < primed_first_dimacs)
-                heuristic_lit_cmp->counts[abs(l)] += score; //score
-            else 
-                heuristic_lit_cmp->counts[abs(l)-distance] += score;
-            core_literal = i;
+    int last_index = 0, corelen = 0;
+    if(true){
+        int core_literal = 0;
+        for(int i=0; i<assumptions.size(); i++){
+            int l = assumptions[i];
+            if(abs(l) >= nInputs+2 and abs(l) <= nInputs+nLatches+1) corelen++;
+            if(lift->failed(l)){
+                double score = (i-core_literal)/20.0;
+                if(score > 1.0) score = 1.05;
+                if(abs(l) < primed_first_dimacs)
+                    heuristic_lit_cmp->counts[abs(l)] += score; //score
+                else 
+                    heuristic_lit_cmp->counts[abs(l)-distance] += score;
+                core_literal = i;
+                last_index = corelen;
+            }
         }
     }
 
@@ -729,6 +776,7 @@ bool PDR::rec_block_cube(){
     vector<State *> states;
     int ct = 0;
     while(!obligation_queue.empty()){
+        if(RESULT!=0) return RESULT;
         Obligation obl = *obligation_queue.begin();  
         if(output_stats_for_recblock){
             cout << "\nRemaining " << obligation_queue.size() << " Obligation\n"; 
@@ -751,18 +799,6 @@ bool PDR::rec_block_cube(){
                 cout << "the cube is generalized to ";
                 show_litvec(tmp_core);
             }
-
-            if (use_punishment and (((obl.state)->next) != nullptr)){
-                if(tmp_core.size() > 30){
-                    (((obl.state)->next)->failed) = (((obl.state)->next)->failed) + 5;
-                }
-                else if(tmp_core.size() > 20){
-                    (((obl.state)->next)->failed) = (((obl.state)->next)->failed) + 3;
-                }
-                else if(tmp_core.size() > 10){
-                    (((obl.state)->next)->failed) = (((obl.state)->next)->failed) + 1;
-                }
-            }
             
             int k;
             for(k = obl.frame_k + 1; k<=depth(); ++k){
@@ -772,37 +808,10 @@ bool PDR::rec_block_cube(){
                 }
             }
             add_cube(tmp_core, k, true, false, k - obl.frame_k + (tmp_core.size() < core.size()));
-
-            // if(k < PEBMC_step - obl.depth -5 and tmp_core2.size()==tmp_core.size()) { //PDR pursue BMC 3
-            //     cout << "111" << endl;
-            //     int k2 = min(PEBMC_step - obl.depth -5, depth()+1);
-            //     add_cube(tmp_core2, k2, true);
-            // }
                 
             if(k <= depth())
                obligation_queue.insert(Obligation(obl.state, k, obl.depth)); 
         }else{
-            if(((obl.state)->failed_depth) and ((obl.state)->failed_depth) <= obl.depth + obl.frame_k){
-                obligation_queue.erase(obligation_queue.begin());
-                if (((obl.state)->next) != nullptr) {
-                    (((obl.state)->next)->failed_depth) = ((obl.state)->failed_depth);
-                }
-                continue;
-            }
-            if((obl.state)->failed >= 5 and ((obl.depth + obl.frame_k) > depth())){
-                obligation_queue.erase(obligation_queue.begin());
-                ((obl.state)->failed_depth) = obl.depth + obl.frame_k;
-                if (((obl.state)->next) != nullptr) {
-                    (((obl.state)->next)->failed_depth) = ((obl.state)->failed_depth);
-                }
-                continue;
-            }
-
-            // if(obl.depth + obl.frame_k > depth()+200) {          //PDR pursue BMC 4
-            //     obligation_queue.erase(obligation_queue.begin());
-            //     continue; 
-            // }
-
             State *s = new State();
             ++nCTI;
             extract_state_from_sat(sat, s, obl.state);
@@ -812,14 +821,6 @@ bool PDR::rec_block_cube(){
                 log_witness();
                 return false;
             }else{
-                //if (PEBMC_step-depth()-2 > 0  and obl.depth + obl.frame_k == depth()) //PDR pursue BMC 5
-                //    add_cube(s->latches, obl.frame_k, true);
-                // if(PEBMC_step-depth()-2 > 0  and depth() % 2==1 and obl.depth > 20){ //PDR pursue BMC 6
-                //     if(obl.depth + obl.frame_k == depth()){
-                //         add_cube(s->latches, obl.frame_k, true);  
-                //         continue;      
-                //     } 
-                // }
                 obligation_queue.insert(Obligation(s, obl.frame_k - 1, obl.depth + 1));
             }
         }
@@ -847,14 +848,6 @@ bool PDR::propagate(){
         int ckeep = 0, cprop = 0;
         for(auto ci = frames[i].cubes.begin(); ci!=frames[i].cubes.end();){
             if(is_inductive(frames[i].solver, *ci, true)){
-                //pursue igoodlemma
-                //Cube tempcube = *ci;
-                //updateLitOrder(tempcube, 0);
-                // for(int index: tempcube){
-                //     //cout << abs(index) << " ";
-                //     heuristic_lit_cmp->counts[abs(index)] += 10.0/tempcube.size();   
-                // }
-
                 ++cprop;
                 // should add to frame k+1
                 if(core.size() < ci->size())
@@ -882,25 +875,28 @@ void PDR::mic(Cube &cube, int k, int depth){
     ++nmic;
     int mic_failed = 0;
     set<int> required;
-    if(refer_skip || !use_heuristic) sort(cube.begin(), cube.end(), Lit_CMP());
+    sort(cube.begin(), cube.end(), Lit_CMP());
 
     //refer skip
     vector<int> blocker;
     blocker.clear();
-    if(refer_skip){
-        for(auto ci = frames[k].cubes.begin(); ci!=frames[k].cubes.end(); ci++){
-            Cube block_lemma = *ci;
-            if (includes(cube.begin(), cube.end(), block_lemma.begin(), block_lemma.end())) {
-                blocker.swap(block_lemma);
-                break;  
-            }
-        }
-    }
+    // if(thread_index == 1){  //线程1采用refer_skip技术 refer_skip
+    //     for(auto ci = frames[k].cubes.begin(); ci!=frames[k].cubes.end(); ci++){
+    //         Cube block_lemma = *ci;
+    //         if (includes(cube.begin(), cube.end(), block_lemma.begin(), block_lemma.end())) {
+    //             blocker.swap(block_lemma);
+    //             break;  
+    //         }
+    //     }
+    // }
     
     //drop literal
-    if(use_heuristic){
+    if(thread_index == 0)  //线程1采用启发式排序 线程2采用启发式排序逆序 线程3不采用启发式排序（常规排序）
         stable_sort(cube.begin(), cube.end(), *heuristic_lit_cmp);
-    }
+    // if(thread_index == 2)
+    //     reverse(cube.begin(), cube.end());
+    if(thread_index > 0) 
+        random_shuffle(cube.begin(), cube.end());
     Cube tmp_cube = cube;
     for(int l : tmp_cube){     
         vector<int> cand;
@@ -1010,8 +1006,6 @@ bool PDR::CTG_down(Cube &cube, int k, int rec_depth, set<int> &required){
     }
 }
 
-
-
 void PDR::generalize(Cube &cube, int k){
     mic(cube, k, 1);
 }
@@ -1069,17 +1063,16 @@ bool PDR::check_BMC1(){
 }
 
 int PDR::check(){
-    proof_obligation[0] = 0;
     initialize();
 
     if(!check_BMC0()) {
         cout << "check BMC0 failed" << endl;
-        PEBMC_result = 10; 
+        if(!share_memory_test  || thread_index == 0) RESULT = 10; 
         return 10;
     }
     if(!check_BMC1()) {
         cout << "check BMC1 failed" << endl;
-        PEBMC_result = 10; 
+        if(!share_memory_test  || thread_index == 0) RESULT = 10; 
         return 10;
     }
 
@@ -1092,45 +1085,67 @@ int PDR::check(){
     int result = 10;
     int ct = 0;
     while(true){
-        if(PEBMC_result!=0) return PEBMC_result; //PDR pursue BMC 1
-        if(output_stats_for_others)
-            cout<<"\n\n----------------LEVEL "<< depth() << "----------------------\n";
-
+        //同步其他线程结果
+        if(RESULT!=0) return RESULT; 
+        //线程交互
+        bool learn_clauses = false;
+        if(share_memory and thread_index == 0) learn_clauses = true;
+            else if(share_memory and more_main_thread and thread_index == 3) learn_clauses = true;
+        if(learn_clauses){
+            for(int i=1; i<=depth(); i++){
+                if(i>=1000) break;
+                //学习需要加入到所有frame的子句
+                while(!shared_clauses[thread_index][i].Empty()){ 
+                    Cube dequeue_cube = shared_clauses[thread_index][i].DeQueue();
+                    //sort(dequeue_cube.begin(), dequeue_cube.end(), Lit_CMP());
+                    pair<set<Cube, Cube_CMP>::iterator, bool> rv = frames[i].cubes.insert(dequeue_cube);
+                    if(!rv.second) continue;
+                    //cout << "thread" + to_string(thread_index) + " dequeue into " + to_string(i) + " " + return_litvec(dequeue_cube) +"\n";
+                    for(int index=1; index<=i; index++){
+                        for(int l : dequeue_cube)
+                            frames[index].solver->add(-l);
+                        frames[index].solver->add(0); 
+                    }
+                }      
+                //学习需要加入到最后一frame的子句
+                while(!tolast_shared_clauses[thread_index][i].Empty()){ 
+                    Cube dequeue_cube = tolast_shared_clauses[thread_index][i].DeQueue();
+                    pair<set<Cube, Cube_CMP>::iterator, bool> rv = frames[i].cubes.insert(dequeue_cube);
+                    if(!rv.second) continue;
+                    for(int l : dequeue_cube)
+                        frames[i].solver->add(-l);
+                    frames[i].solver->add(0); 
+                }    
+            }                 
+        }    
+        // 查询坏状态 get states which are one step to bad
         State *s = new State();
-        // get states which are one step to bad
         bool flag = get_pre_of_bad(s);
         if(flag){
             ++nCTI;
-            //PDR pursue BMC 2
-            //if (PEBMC_step-depth()-2 > 0) 
-            //    add_cube(s->latches, depth(), true); 
-            int i;
-            for(i=0; i<(s->latches).size(); i++){
-                proof_obligation[i] = s->latches[i];
-            }
-            proof_obligation[i] = 0;
-
             obligation_queue.clear();    
             obligation_queue.insert(Obligation(s, depth()-1, 1));
             top_frame_cannot_reach_bad = false;
             if(!rec_block_cube()){
                 // find counter-example
                 result = 10;
-                show_witness();
-                PEBMC_result = 10; 
+                if(RESULT==0) {
+                    if(!share_memory_test  || thread_index == 0) RESULT = 10; 
+                    show_witness();
+                }
                 break;
             }else{
                 for(State *p : states) delete p;
             }
         }
-        else{
+        else{  
             assert(obligation_queue.size() == 0);
             if(output_stats_for_recblock) cout << "CTI not found\n";
             if(output_stats_for_frames and int(frames.size()) < output_frame_size)  show_frames();
             if(propagate()){
                 // find invariants
                 result = 20;
-                PEBMC_result = 20; 
+                if(!share_memory_test  || thread_index == 0) RESULT = 20; 
                 break;
             }
             if(output_stats_for_conclusion){
@@ -1146,39 +1161,11 @@ int PDR::check(){
             new_frame();
             top_frame_cannot_reach_bad = true;
             earliest_strengthened_frame = depth();
-            cout << "pdr_step = " << depth() << endl;
-            
-            // //PDR pursue BMC (when BMC_step > PDR_step && PDR_step > 10)
-            // int step_sub = min(PEBMC_step-depth()-2, 5);
-            // if(depth() < 10) step_sub = 0;
-            // //cout << step_sub << endl;
-            // for(int count = 1; count <= step_sub; count++){  
-            //     int temp = depth();
-            //     for(auto ci = frames[temp].cubes.begin(); ci!=frames[temp].cubes.end();){
-            //         if(is_inductive(frames[temp].solver, *ci, true)){
-            //             // should add to frame k+1
-            //             if(core.size() < ci->size())
-            //                 add_cube(core, temp+1, true, true);
-            //             else
-            //                 add_cube(core, temp+1, false, true);
-            //             auto rm = ci++;
-            //             frames[temp].cubes.erase(rm);
-                        
-            //         }else{
-            //             ci++;  
-            //         } 
-            //     }
-            //     // 有bug
-            //     // if(frames[temp].cubes.size() == 0){
-            //     //     PEBMC_result = 20; 
-            //     //     return 20;
-            //     // }     
-            //     new_frame();
-            //     top_frame_cannot_reach_bad = true;
-            // }
+            cout << "pdr" + to_string(thread_index) + "_step = " +  to_string(earliest_strengthened_frame) + "\n";
         }
     }
-    cout << "depth = " << depth() << endl;
+    int d = depth();
+    cout <<  "depth" + to_string(thread_index) + " = " + to_string(d) + "\n";
     
     for(auto f : frames){
         if(f.solver != nullptr)
@@ -1187,227 +1174,4 @@ int PDR::check(){
     frames.clear();
 
     return result;
-}
-
-int PDR::incremental_check(){
-    if(first_incremental_check){
-        first_incremental_check = 0;
-        initialize();
-        if(!check_BMC0()){
-            cout << "check BMC0 failed" << endl;
-            return 1;
-        } 
-        if(!check_BMC1()){
-            cout << "check BMC1 failed" << endl;
-            return 1;
-        } 
-
-        // main loop of IC3, start from depth = 1.
-        // Fk need to hold -Bad all the time
-        new_frame();
-        assert(depth() == 1);
-        top_frame_cannot_reach_bad = true;
-        earliest_strengthened_frame = depth();
-        
-        return -1;
-    }
-
-    while(true){
-        if(output_stats_for_others)
-            cout<<"\n\n----------------LEVEL "<< depth() << "----------------------\n";
-
-        State *s = new State();
-        // get states which are one step to bad
-        bool flag = get_pre_of_bad(s);
-        if(flag){
-            ++nCTI;
-            obligation_queue.clear();    
-            obligation_queue.insert(Obligation(s, depth()-1, 1));
-            top_frame_cannot_reach_bad = false;
-            if(!rec_block_cube()){
-                show_witness();
-                return 1;
-            }   
-            else{
-                for(State *p : states) delete p;
-            }
-        }
-        else{
-            assert(obligation_queue.size() == 0);
-            if(output_stats_for_recblock) cout << "CTI not found\n";
-            if(output_stats_for_frames and int(frames.size()) < output_frame_size)  show_frames();
-            if(propagate()) {
-                return 0;
-            }
-            if(output_stats_for_conclusion){
-                cout << ". # Level        " << depth() << endl;
-                cout << ". # Queries:     " << nQuery << endl;
-                cout << ". # CTIs:        " << nCTI << endl;
-                cout << ". # CTGs:        " << nCTG << endl;
-                cout << ". # mic calls:   " << nmic << endl;
-                cout << ". # Red. cores:  " << nCoreReduced << endl;
-                cout << ". # Abort joins: " << nAbortJoin << endl;
-                cout << ". # Abort mics:  " << nAbortMic << endl;
-            }
-            new_frame();
-            top_frame_cannot_reach_bad = true;
-            earliest_strengthened_frame = depth();
-            return -1;
-        }
-    }
-}
-
-int PDR::incremental_check2(){
-    if(first_incremental_check){
-        first_incremental_check = 0;
-        initialize();
-        if(!check_BMC0()){
-            cout << "check BMC0 failed" << endl;
-            return 1;
-        } 
-        if(!check_BMC1()){
-            cout << "check BMC1 failed" << endl;
-            return 1;
-        } 
-
-        // main loop of IC3, start from depth = 1.
-        // Fk need to hold -Bad all the time
-        new_frame();
-        assert(depth() == 1);
-        top_frame_cannot_reach_bad = true;
-        earliest_strengthened_frame = depth();
-        
-        return -1;
-    }
-
-    while(true){
-        if(output_stats_for_others)
-            cout<<"\n\n----------------LEVEL "<< depth() << "----------------------\n";
-
-        State *s = new State();
-        // get states which are one step to bad
-        bool flag = get_pre_of_bad(s);
-        if(flag){
-            ++nCTI;
-            add_cube(s->latches, depth(), true);
-            obligation_queue.clear();    
-            obligation_queue.insert(Obligation(s, depth()-1, 1));
-            top_frame_cannot_reach_bad = false;
-            if(!rec_block_cube2()){
-                show_witness();
-                return 1;
-            }   
-            else{
-                for(State *p : states) delete p;
-            }
-        }
-        else{
-            assert(obligation_queue.size() == 0);
-            if(output_stats_for_recblock) cout << "CTI not found\n";
-            if(output_stats_for_frames and int(frames.size()) < output_frame_size)  show_frames();
-            if(propagate()) {
-                return 0;
-            }
-            if(output_stats_for_conclusion){
-                cout << ". # Level        " << depth() << endl;
-                cout << ". # Queries:     " << nQuery << endl;
-                cout << ". # CTIs:        " << nCTI << endl;
-                cout << ". # CTGs:        " << nCTG << endl;
-                cout << ". # mic calls:   " << nmic << endl;
-                cout << ". # Red. cores:  " << nCoreReduced << endl;
-                cout << ". # Abort joins: " << nAbortJoin << endl;
-                cout << ". # Abort mics:  " << nAbortMic << endl;
-            }
-            new_frame();
-            top_frame_cannot_reach_bad = true;
-            earliest_strengthened_frame = depth();
-            return -1;
-        }
-    }
-}
-
-
-bool PDR::rec_block_cube2(){
-    // all the states dealed in rec_block process will not be released.
-    vector<State *> states;
-    int ct = 0;
-    while(!obligation_queue.empty()){
-        Obligation obl = *obligation_queue.begin();  
-        if(output_stats_for_recblock){
-            cout << "\nRemaining " << obligation_queue.size() << " Obligation\n"; 
-            cout << "Handling Frames[" << obl.frame_k << "]'s " << "Obligation, depth = " << obl.depth << " , stamp = " << ((obl.state)->index);
-            show_state(obl.state);
-        }
-        // check SAT?[Fk /\ -s /\ T /\ s']
-        SATSolver * sat = frames[obl.frame_k].solver;
-        if(is_inductive(sat, obl.state->latches, true)){
-            if(output_stats_for_recblock){
-                cout << "the obligation is already fulfilled, and cube is lifted to ";
-                show_litvec(core);
-            }
-            // latches is inductive to Fk
-            obligation_queue.erase(obligation_queue.begin());
-            
-            // Cube tmp_core = core;
-            // generalize(tmp_core, obl.frame_k);
-            // if(output_stats_for_recblock){
-            //     cout << "the cube is generalized to ";
-            //     show_litvec(tmp_core);
-            // }
-
-            // if (use_punishment and (((obl.state)->next) != nullptr)){
-            //     if(tmp_core.size() > 30){
-            //         (((obl.state)->next)->failed) = (((obl.state)->next)->failed) + 5;
-            //     }
-            //     else if(tmp_core.size() > 20){
-            //         (((obl.state)->next)->failed) = (((obl.state)->next)->failed) + 3;
-            //     }
-            //     else if(tmp_core.size() > 10){
-            //         (((obl.state)->next)->failed) = (((obl.state)->next)->failed) + 1;
-            //     }
-            // }
-            
-            // int k;
-            // for(k = obl.frame_k + 1; k<=depth(); ++k){
-            //     // cout<<"check inductive addCube "<<k<<endl;
-            //     if(!is_inductive(frames[k].solver, tmp_core, false)){
-            //         break;
-            //     }
-            // }
-            // add_cube(tmp_core, k, true);  11111
-
-            //if(k <= depth())
-            //    obligation_queue.insert(Obligation(obl.state, k, obl.depth)); 
-        }else{
-            if(((obl.state)->failed_depth) and ((obl.state)->failed_depth) <= obl.depth + obl.frame_k){
-                obligation_queue.erase(obligation_queue.begin());
-                if (((obl.state)->next) != nullptr) {
-                    (((obl.state)->next)->failed_depth) = ((obl.state)->failed_depth);
-                }
-                continue;
-            }
-            if((obl.state)->failed >= 5 and ((obl.depth + obl.frame_k) > depth())){
-                obligation_queue.erase(obligation_queue.begin());
-                ((obl.state)->failed_depth) = obl.depth + obl.frame_k;
-                if (((obl.state)->next) != nullptr) {
-                    (((obl.state)->next)->failed_depth) = ((obl.state)->failed_depth);
-                }
-                continue;
-            }
-            
-            State *s = new State();
-            ++nCTI;
-            extract_state_from_sat(sat, s, obl.state);
-            if(obl.frame_k == 0){
-                cex_state_idx = s;
-                find_cex = true;
-                log_witness();
-                return false;
-            }else{
-                add_cube(s->latches, obl.frame_k, true);
-                obligation_queue.insert(Obligation(s, obl.frame_k - 1, obl.depth + 1));
-            }
-        }
-    }
-    return true;
 }

@@ -10,14 +10,15 @@
 #include "aig.hpp"
 #include "basic.hpp"
 #include "sat_solver.hpp"
+#include <atomic>
 using namespace std;
 
 #ifndef TIMESTAMP
 #define TIMESTAMP
     extern unsigned long long state_count;
-    extern int PEBMC_result; // 0 means safe in PEBMC_step; 10 means find a bug; 20 proves safety
-    extern int PEBMC_step;
-    extern int* proof_obligation;
+    extern int RESULT; // 0 means safe in PORTFOLIO; 10 means find a bug; 20 proves safety
+    extern int max_step;
+    //extern int* proof_obligation;
 #endif
 
 // save information for debug
@@ -94,10 +95,9 @@ public:
         if (frame_k > b.frame_k) return false;
         if (depth > b.depth) return true;           // prefer shallower (heuristic)
         if (depth < b.depth) return false;
-        // if (depth < b.depth) return true;           // prefer shallower (heuristic)
-        // if (depth > b.depth) return false;
-        //return ((state) < ((b.state)));
         return ((state->index) < ((b.state)->index));
+
+        //return ((state) < ((b.state)));
     }
 };
 
@@ -143,6 +143,75 @@ public:
     }
 };
 
+template<class T>
+class LockFreeQueue
+{
+    struct Node
+    {
+        T _value;
+        atomic<Node*> _next;
+        Node(const T& v)
+            :_value(v)
+            ,_next(nullptr)
+        {}
+    };
+    public:
+    LockFreeQueue(){_head = _tail = new Node(T());}
+
+    LockFreeQueue(const LockFreeQueue<T>&) = delete;
+ 
+    ~LockFreeQueue(){
+        Node* cur = _head;
+        while(cur)
+        {
+            Node* next = cur->_next;
+            delete cur;
+            cur = next;
+        }
+    }
+
+    void Enqueue(const T& x){
+        Node* newnode = new Node(x);//要插入的新值
+        Node* oldtail = nullptr;//旧的尾节点
+        Node* nullnode = nullptr;//空节点
+        do
+        {
+            oldtail = _tail.load();//用load取出当前_tail节点的值
+        } 
+        //如果当前tail节点的下一个节点是空，也就是等于参数一，那么修改为参数二
+        while (oldtail->_next.compare_exchange_weak(nullnode, newnode) != true);
+        //由于现在的真正的尾节点是newnode，所以将_tail节点更新为newnode
+        _tail.compare_exchange_weak(oldtail, newnode);
+    }
+
+    T DeQueue(){
+        Node* oldhead = _head.load();//取出当前的头节点，也就是哑节点
+        T ret;
+        do
+        {
+            Node* next = oldhead->_next;//取出头节点的下一个节点，此节点中有我们想要的值
+            if(next == nullptr)
+            {
+                return T();
+            }
+            else
+            {
+                ret = next->_value;//取走值
+            }
+        }
+        //将头节点(哑节点)修改为下一个节点
+        while(_head.compare_exchange_weak(oldhead,oldhead->_next) != true);	
+        delete oldhead;
+        return ret;
+    }
+
+    bool Empty() {return _head.load() == _tail.load();}
+
+private:
+    atomic<Node*> _head;
+    atomic<Node*> _tail;
+};
+
 
 class Frame{
 public:
@@ -171,6 +240,7 @@ class PDR
     const int unprimed_first_dimacs = 2;
     int primed_first_dimacs;
     int property_index;
+    int thread_index;
     map<int, int> map_to_prime, map_to_unprime; // used for mapping ands
     
     // for IC3
@@ -205,9 +275,13 @@ public:
     // for incremental check
     bool first_incremental_check;
 
-    PDR(Aiger *aiger, int property_index): aiger(aiger), property_index(property_index){
+    //share_thread
+    //boost::lockfree::spsc_queue<shared_ptr<clause_store>, boost::lockfree::capacity<10240000>> import_clause;
+
+    PDR(Aiger *aiger, int thread_index): aiger(aiger), thread_index(thread_index){
         start_time = std::chrono::steady_clock::now();
         first_incremental_check = 1;
+        property_index = 0;
     }
     ~PDR(){
         if(satelite != nullptr) delete satelite;
@@ -260,12 +334,14 @@ public:
     // log
     void show_aag();
     void show_state(State *s);
+    string return_state(State *s);
     void show_witness();
     void log_witness();
     void show_PO();
     void show_variables();
     void show_lit(int l) const;
     void show_litvec(vector<int> &lv) const;
+    string return_litvec(vector<int> &lv) const;
     void show_frames();
 
 
