@@ -3,12 +3,14 @@
 #include <assert.h>
 #include <sstream>
 #include <algorithm>
+#include <boost/lockfree/spsc_queue.hpp>
 
 unsigned long long state_count = 0;
 int RESULT = 0; // 0 means safe in PORTFOLIO; 10 means find a bug; 20 proves safety
 int max_step = 0;
-LockFreeQueue<Cube> shared_clauses[8][1000]; //记录新学习得到的需要被加入threadi的所有frame的子句
-LockFreeQueue<Cube> tolast_shared_clauses[8][1000]; //记录新学习得到的需要被加入threadi最后一frame的子句
+//LockFreeQueue<Cube> tolast_shared_clauses[8][1000]; //记录新学习得到的需要被加入threadi最后一frame的子句
+boost::lockfree::spsc_queue<Cube, boost::lockfree::capacity<5000>> cube_producer[8][1000]; //记录新学习得到的需要被加入threadi的所有frame的子句
+boost::lockfree::spsc_queue<Cube, boost::lockfree::capacity<5000>> tolast_cube_producer[8][1000]; //记录新学习得到的需要被加入threadi的最后一frame的子句
 
 //  Log functions
 // --------------------------------------------
@@ -375,16 +377,14 @@ void PDR::add_cube(Cube &cube, int k, bool to_all, bool ispropagate, int isigood
     pair<set<Cube, Cube_CMP>::iterator, bool> rv = frames[k].cubes.insert(cube);
     if(!rv.second) return;
 
-    if(share_memory and thread_index!=0 and k) { //and cube.size()<5 and isigoodlemma and 
+    if(share_memory and thread_index!=1) { //and k and cube.size()<5 and isigoodlemma and 
         //cout << "thread" + to_string(thread_index) + " enqueue " + return_litvec(cube) +"\n";
         if(k>999) k=999;
         if(to_all){
-            shared_clauses[0][k].Enqueue(cube);
-            if(more_main_thread) shared_clauses[3][k].Enqueue(cube);
+            cube_producer[thread_index][k].push(cube);
         }
         else {
-            tolast_shared_clauses[0][k].Enqueue(cube);
-            if(more_main_thread) tolast_shared_clauses[3][k].Enqueue(cube);
+            tolast_cube_producer[thread_index][k].push(cube);
         }
     }    
 
@@ -893,9 +893,11 @@ void PDR::mic(Cube &cube, int k, int depth){
     //drop literal
     if(thread_index == 0)  //线程1采用启发式排序 线程2采用启发式排序逆序 线程3不采用启发式排序（常规排序）
         stable_sort(cube.begin(), cube.end(), *heuristic_lit_cmp);
-    // if(thread_index == 2)
-    //     reverse(cube.begin(), cube.end());
-    if(thread_index > 0) 
+    if(thread_index == 1 and share_memory)
+        stable_sort(cube.begin(), cube.end(), *heuristic_lit_cmp);
+    else if (thread_index == 1 and !share_memory)
+        random_shuffle(cube.begin(), cube.end());
+    if(thread_index > 1) 
         random_shuffle(cube.begin(), cube.end());
     Cube tmp_cube = cube;
     for(int l : tmp_cube){     
@@ -1067,12 +1069,12 @@ int PDR::check(){
 
     if(!check_BMC0()) {
         cout << "check BMC0 failed" << endl;
-        if(!share_memory_test  || thread_index == 0) RESULT = 10; 
+        if(!share_memory_test  || thread_index == 1) RESULT = 10; 
         return 10;
     }
     if(!check_BMC1()) {
         cout << "check BMC1 failed" << endl;
-        if(!share_memory_test  || thread_index == 0) RESULT = 10; 
+        if(!share_memory_test  || thread_index == 1) RESULT = 10; 
         return 10;
     }
 
@@ -1089,33 +1091,41 @@ int PDR::check(){
         if(RESULT!=0) return RESULT; 
         //线程交互
         bool learn_clauses = false;
-        if(share_memory and thread_index == 0) learn_clauses = true;
+        if(share_memory and thread_index == 1) learn_clauses = true;
             else if(share_memory and more_main_thread and thread_index == 3) learn_clauses = true;
         if(learn_clauses){
             for(int i=1; i<=depth(); i++){
                 if(i>=1000) break;
                 //学习需要加入到所有frame的子句
-                while(!shared_clauses[thread_index][i].Empty()){ 
-                    Cube dequeue_cube = shared_clauses[thread_index][i].DeQueue();
-                    //sort(dequeue_cube.begin(), dequeue_cube.end(), Lit_CMP());
-                    pair<set<Cube, Cube_CMP>::iterator, bool> rv = frames[i].cubes.insert(dequeue_cube);
-                    if(!rv.second) continue;
-                    //cout << "thread" + to_string(thread_index) + " dequeue into " + to_string(i) + " " + return_litvec(dequeue_cube) +"\n";
-                    for(int index=1; index<=i; index++){
-                        for(int l : dequeue_cube)
-                            frames[index].solver->add(-l);
-                        frames[index].solver->add(0); 
+                for(int thread=0; thread<=3; thread++){
+                    while(!cube_producer[thread][i].empty()){
+                        if(RESULT!=0) return RESULT; 
+                        Cube dequeue_cube;
+                        cube_producer[thread][i].pop(dequeue_cube);
+                        //sort(dequeue_cube.begin(), dequeue_cube.end(), Lit_CMP());
+                        //cout << "thread" + to_string(thread) + " dequeue into " + to_string(i) + " " + return_litvec(dequeue_cube) +"\n";
+                        pair<set<Cube, Cube_CMP>::iterator, bool> rv = frames[i].cubes.insert(dequeue_cube);
+                        if(!rv.second) continue;
+                        for(int index=1; index<=i; index++){
+                            for(int l : dequeue_cube)
+                                frames[index].solver->add(-l);
+                            frames[index].solver->add(0); 
+                        }
                     }
-                }      
+                } 
                 //学习需要加入到最后一frame的子句
-                while(!tolast_shared_clauses[thread_index][i].Empty()){ 
-                    Cube dequeue_cube = tolast_shared_clauses[thread_index][i].DeQueue();
-                    pair<set<Cube, Cube_CMP>::iterator, bool> rv = frames[i].cubes.insert(dequeue_cube);
-                    if(!rv.second) continue;
-                    for(int l : dequeue_cube)
-                        frames[i].solver->add(-l);
-                    frames[i].solver->add(0); 
-                }    
+                for(int thread=0; thread<=3; thread++){
+                    while(!tolast_cube_producer[thread][i].empty()){ 
+                        if(RESULT!=0) return RESULT; 
+                        Cube dequeue_cube;
+                        tolast_cube_producer[thread][i].pop(dequeue_cube);
+                        pair<set<Cube, Cube_CMP>::iterator, bool> rv = frames[i].cubes.insert(dequeue_cube);
+                        if(!rv.second) continue;
+                        for(int l : dequeue_cube)
+                            frames[i].solver->add(-l);
+                        frames[i].solver->add(0); 
+                    }    
+                }
             }                 
         }    
         // 查询坏状态 get states which are one step to bad
@@ -1130,8 +1140,8 @@ int PDR::check(){
                 // find counter-example
                 result = 10;
                 if(RESULT==0) {
-                    if(!share_memory_test  || thread_index == 0) RESULT = 10; 
-                    show_witness();
+                    if(!share_memory_test  || thread_index == 1) RESULT = 10; 
+                    //show_witness();
                 }
                 break;
             }else{
@@ -1145,7 +1155,7 @@ int PDR::check(){
             if(propagate()){
                 // find invariants
                 result = 20;
-                if(!share_memory_test  || thread_index == 0) RESULT = 20; 
+                if(!share_memory_test  || thread_index == 1) RESULT = 20; 
                 break;
             }
             if(output_stats_for_conclusion){

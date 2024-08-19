@@ -156,7 +156,7 @@ class LockFreeQueue
         {}
     };
     public:
-    LockFreeQueue(){_head = _tail = new Node(T());}
+    LockFreeQueue(){_head = _tail = new Node(T());size=0;error=0;}
 
     LockFreeQueue(const LockFreeQueue<T>&) = delete;
  
@@ -182,6 +182,7 @@ class LockFreeQueue
         while (oldtail->_next.compare_exchange_weak(nullnode, newnode) != true);
         //由于现在的真正的尾节点是newnode，所以将_tail节点更新为newnode
         _tail.compare_exchange_weak(oldtail, newnode);
+        size++;
     }
 
     T DeQueue(){
@@ -192,6 +193,7 @@ class LockFreeQueue
             Node* next = oldhead->_next;//取出头节点的下一个节点，此节点中有我们想要的值
             if(next == nullptr)
             {
+                if(size>0) error=1;
                 return T();
             }
             else
@@ -202,14 +204,23 @@ class LockFreeQueue
         //将头节点(哑节点)修改为下一个节点
         while(_head.compare_exchange_weak(oldhead,oldhead->_next) != true);	
         delete oldhead;
+        size--;
         return ret;
     }
 
-    bool Empty() {return _head.load() == _tail.load();}
+    bool Empty() {
+        return _head.load() == _tail.load();
+    }
+
+    int Size() {return size;}
+
+    bool Error() {return error;}
 
 private:
     atomic<Node*> _head;
     atomic<Node*> _tail;
+    int size;
+    bool error;
 };
 
 

@@ -22,6 +22,7 @@ We conducted experiments on the benchmarks from the HWMCC competitions in 2015, 
 | :------------: | :-----: | :-----: | :-----: |
 |    4thread     | 74      |  199    |   273   |
 |   4thread-acc  |   79    |    197  |   276   |
+| 4thread-acc-debug |   79    |    197  |   276   |
 |   IGOODLEMMA   | 76      |   203   |  279    |
 |    ABC         | 68      |   198   |   266   |
 
@@ -29,6 +30,7 @@ We conducted experiments on the benchmarks from the HWMCC competitions in 2015, 
 | :------------: | :-----: | :-----: | :-----: |
 |    4thread     | 38      |  88    |   126   |
 |   4thread-acc  |   39    |    86  |   125   |
+| 4thread-acc-debug |   38    |    87  |   125   |
 |   IGOODLEMMA   | 37      |   87   |  124    |
 |    ABC         | 39      |   91   |   130   |
 
@@ -36,6 +38,7 @@ We conducted experiments on the benchmarks from the HWMCC competitions in 2015, 
 | :------------: | :-----: | :-----: | :-----: |
 |    4thread     | 30      |  202    |   232   |
 |   4thread-acc  |   34    |    203  |   237   |
+| 4thread-acc-debug |   39    |    204  |   243   |
 |   IGOODLEMMA   | 33      |   195   |  228    |
 |    ABC         | 27      |   191   |   218   |
 
