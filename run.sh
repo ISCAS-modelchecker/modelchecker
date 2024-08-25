@@ -4,7 +4,7 @@ clear;
 make clean;
 make -j;
 
-/home/zhulf/portfolioMC/modelchecker  /home/zhulf/modelchecker/testcase/bug_instance/prodcellp0neg.aag
+./modelchecker  /home/zhulf/modelchecker/testcase/bug_instance/prodcellp0neg.aag
 
 
 

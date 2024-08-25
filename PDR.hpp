@@ -128,6 +128,23 @@ public:
 
 typedef vector<int> Cube; // the lits in the cube must be sorted
 
+class share_Cube{
+public:
+    bool toall;
+    int frame;
+    Cube share_cube;
+    share_Cube(){
+        toall = 1;
+        frame = 1;
+        share_cube.clear();
+    }
+    share_Cube(bool b, int i, Cube c){
+        toall = b;
+        frame = i;
+        share_cube = c;
+    }
+};
+
 class Cube_CMP{
 public:
     bool operator()(const Cube &a, const Cube &b) const{
@@ -252,6 +269,7 @@ class PDR
     int primed_first_dimacs;
     int property_index;
     int thread_index;
+    int main_thread_index;
     map<int, int> map_to_prime, map_to_unprime; // used for mapping ands
     
     // for IC3
@@ -289,10 +307,14 @@ public:
     //share_thread
     //boost::lockfree::spsc_queue<shared_ptr<clause_store>, boost::lockfree::capacity<10240000>> import_clause;
 
-    PDR(Aiger *aiger, int thread_index): aiger(aiger), thread_index(thread_index){
+    PDR(Aiger *aiger, int Thread_index): aiger(aiger), thread_index(Thread_index){
         start_time = std::chrono::steady_clock::now();
         first_incremental_check = 1;
         property_index = 0;
+        if(Thread_index == 1)   main_thread_index = 0;
+            else if(Thread_index == 4)   main_thread_index = 1;
+            else main_thread_index = -1;
+        
     }
     ~PDR(){
         if(satelite != nullptr) delete satelite;

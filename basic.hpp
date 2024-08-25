@@ -25,9 +25,8 @@
 #define use_heuristic_igoodlemma 0
 #define refer_skip 1
 #define thread_4 1          //并行PDR的线程数 1表示4线程
-#define thread_8 0          //并行PDR的线程数 1表示8线程
+#define thread_8 1          //并行PDR的线程数 1表示8线程
 #define share_memory 1     //判断线程间是否共享信息
-#define more_main_thread 0    //更多线程共享信息
 #define share_memory_test 0   //线程1-3结束后不记录验证结果 只记录线程0（信息共享线程）的最终结果
  
 class Literal{

@@ -34,7 +34,7 @@ void *thread_start_pdr(void *aiger){
 }
 
 int main(int argc, char **argv){
-    srand((unsigned int)time(NULL));
+    //srand((unsigned int)time(NULL));
     auto t_begin = system_clock::now();
     cout<<"c USAGE: ./modelchecker <aig-file> [propertyIndex]\n";
     Aiger *aiger = load_aiger_from_file(string(argv[1]));
@@ -54,9 +54,9 @@ int main(int argc, char **argv){
     }
     if(thread_8){
         int ret5 = pthread_create (&tpdr5, NULL, thread_start_pdr, (void *)aiger); 
-        int ret6 = pthread_create (&tpdr6, NULL, thread_start_pdr, (void *)aiger); 
-        int ret7 = pthread_create (&tpdr7, NULL, thread_start_pdr, (void *)aiger); 
-        int ret8 = pthread_create (&tpdr8, NULL, thread_start_pdr, (void *)aiger); 
+        // int ret6 = pthread_create (&tpdr6, NULL, thread_start_pdr, (void *)aiger); 
+        // int ret7 = pthread_create (&tpdr7, NULL, thread_start_pdr, (void *)aiger); 
+        // int ret8 = pthread_create (&tpdr8, NULL, thread_start_pdr, (void *)aiger); 
     }
 
     pthread_join(tpdr1, NULL);
@@ -67,9 +67,9 @@ int main(int argc, char **argv){
     }
     if(thread_8){
         pthread_join(tpdr5, NULL);
-        pthread_join(tpdr6, NULL);
-        pthread_join(tpdr7, NULL);
-        pthread_join(tpdr8, NULL);
+        // pthread_join(tpdr6, NULL);
+        // pthread_join(tpdr7, NULL);
+        // pthread_join(tpdr8, NULL);
     }
 
     if(RESULT  == 10)
