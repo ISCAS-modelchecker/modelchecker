@@ -9,6 +9,9 @@
 #include <pthread.h>
 #include <errno.h>
 #include <stdlib.h>
+extern "C" {
+#include "fold.h"
+}
 using namespace std;
 using namespace std::chrono;
 
@@ -38,7 +41,8 @@ int main(int argc, char **argv){
     //freopen("freopen.out","w",stdout);
     auto t_begin = system_clock::now();
     if(!no_output) cout<<"c USAGE: ./modelchecker <aig-file> [propertyIndex]\n";
-    Aiger *aiger = load_aiger_from_file(string(argv[1]));
+    char *fold = aiger_fold(argv[1], 33333331);
+    Aiger *aiger = load_aiger_from_file(string(fold));
     int property_index = 0;
     if(argc > 2){
         property_index = (unsigned) atoi(argv[2]);
