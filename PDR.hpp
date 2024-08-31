@@ -89,14 +89,20 @@ public:
     State *state = nullptr;
     int frame_k;
     int depth;
-    Obligation(State *s, int k, int d):state(s),frame_k(k),depth(d){}
+    int thread_index;
+    Obligation(State *s, int k, int d, int t):state(s),frame_k(k),depth(d){
+        if(t > 0)
+            thread_index = t;
+        else 
+            thread_index = 1;
+    }
     bool operator<(const Obligation &b) const{
         if (frame_k < b.frame_k) return true;       // prefer lower levels (required)
         if (frame_k > b.frame_k) return false;
         if (depth > b.depth) return true;           // prefer shallower (heuristic)
         if (depth < b.depth) return false;
-        return ((state->index) < ((b.state)->index));
-
+        return (((state->index)%thread_index) < (((b.state)->index)%thread_index));
+        //return ((state->index) < ((b.state)->index));
         //return ((state) < ((b.state)));
     }
 };
@@ -276,8 +282,10 @@ class PDR
     minisatSimp *satelite = nullptr;
     CaDiCaL *lift = nullptr;
     CaDiCaL *init = nullptr;
-    // minisatCore *lift = nullptr;
+    CaDiCaL *checker = nullptr;
+    //minisatCore *lift = nullptr;
     // minisatCore *init = nullptr;
+    int notInvConstraints;
 
     State *cex_state_idx = nullptr;
     bool find_cex = false;
@@ -353,8 +361,9 @@ public:
 
     void encode_init_condition(SATSolver *s);   // I
     void encode_bad_state(SATSolver *s);        // Bad cone, used for test SAT?[I/\-B]
-    void encode_translation(SATSolver *s);      // Latches' Cone + Bad' cone, -Bad must hold
-    
+    void encode_translation(SATSolver *s, bool cons = true);      // Latches' Cone + Bad' cone, -Bad must hold
+    void encode_translation2(SATSolver *s, bool cons = true); 
+    minisatSimp *satelite2 = nullptr;
 
     void clear_po();
     void add_cube(Cube &cube, int k, bool to_all=true, bool ispropagate = false, int isigoodlemma = 0);
@@ -368,6 +377,8 @@ public:
     void show_aag();
     void show_state(State *s);
     string return_state(State *s);
+    string return_input(State *s);
+    string return_latch(State *s);
     void show_witness();
     void log_witness();
     void show_PO();

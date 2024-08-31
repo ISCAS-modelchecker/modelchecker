@@ -146,30 +146,23 @@ Aiger* load_aiger_from_file(string str){
     for(int i=0; i<aiger->num_outputs; ++i){
         read_literal(&fbuf); fbuf++;
         aiger->outputs.push_back(read_literal(&fbuf));
+        if(aig_veb == 2)
+            printf("c read outputs %d\n", aiger->outputs[i]);
     }
 
     for(int i=0; i<aiger->num_bads; ++i){
         read_literal(&fbuf); fbuf++;
         aiger->bads.push_back(read_literal(&fbuf));
+        if(aig_veb == 2)
+            printf("c read bads %d\n", aiger->bads[i]);
     }
 
     for(int i=0; i<aiger->num_constraints; ++i){
         read_literal(&fbuf); fbuf++;
         (aiger->constraints).push_back(read_literal(&fbuf));
+        if(aig_veb == 2)
+            printf("c read constraint %d\n", aiger->constraints[i]);
     }
-
-    //cout << "initial constraints.size = " << (aiger->constraints).size() << endl;
-    // // sort((aiger->constraints).begin(),(aiger->constraints).end());
-    // // int kk = 0;
-    // // for(vector<unsigned>::iterator itor = (aiger->constraints).begin(); itor != (aiger->constraints).end(); ){
-    // //     if((kk >= 1) and (*itor == aiger->constraints[kk-1])){
-    // //         itor = (aiger->constraints).erase(itor);
-    // //     }
-    // //     else{
-    // //         itor++; kk++;
-    // //     }
-    // // }
-    //cout << "simplified constraints.size = " << (aiger->constraints).size() << endl;
     
     // TODO: finish justice and fairness
 
