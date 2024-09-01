@@ -11,6 +11,18 @@ int RESULT = 0; // 0 means safe in PORTFOLIO; 10 means find a bug; 20 proves saf
 boost::lockfree::spsc_queue<share_Cube, boost::lockfree::capacity<500000>> cube_producer[2][8]; //两个主线程 共享 八个子线程的子句
 queue<share_Cube> cube_register[2][9999];
 
+string encode(string str, unsigned x){
+    unsigned char ch;
+    while (x & ~0x7f){
+        ch = (x & 0x7f) | 0x80;
+        str += ch;
+        x >>= 7;
+    }
+    ch = x;
+    str += ch;
+    return str;
+}
+
 //  Log functions
 // --------------------------------------------
 void PDR::show_state(State *s){
@@ -168,7 +180,6 @@ void PDR::show_frames(){
     int k=0;
     cout<<endl;
     for(Frame & f: frames){
-        //cout<<" * -------"<<endl;
         cout << "Level " << k++ <<" (cubeCount = " << f.cubes.size();
         cout<<" varCount =  "<<f.solver->max_var()<<" ";
         cout << ") :" << endl;
@@ -205,7 +216,33 @@ void PDR::show_aag(){
         cout<<dimacs_to_aiger(ands[i].i2);
         cout<<endl;
     }
-    cout<<endl;
+}
+
+void PDR::show_aig(){
+    printf("aig %d %d %d 0 %d 1", nInputs + nLatches + nAnds, nInputs, nLatches, nAnds);
+    if(constraints.size()>0){
+        cout<<" "<< constraints.size();
+    }cout<<endl;
+
+    for(int i=1; i<=nLatches; ++i){
+        cout<<dimacs_to_aiger(nexts[i-1]);
+        if(aiger->latches[i-1].default_val != 0)
+            cout<<" "<<aiger->latches[i-1].default_val;
+        cout<<endl;
+    }
+
+    cout<<dimacs_to_aiger(bad)<<endl;
+    for(int i=0; i<constraints.size(); ++i)
+        cout<<dimacs_to_aiger(constraints[i])<<endl;
+
+    string str;
+    for(int i=0; i<ands.size(); ++i){
+        int d1 = dimacs_to_aiger(ands[i].o) - dimacs_to_aiger(ands[i].i1);
+        cout<<encode(str, 1) << " ";
+        cout<<dimacs_to_aiger(ands[i].i1) - dimacs_to_aiger(ands[i].i2);
+        cout<<endl;
+    }
+    cout << str << endl;
 }
 
 int PDR::prime_var(int var){
@@ -348,18 +385,16 @@ void PDR::translate_to_dimacs(){
         cout << "\nprimed constraints: \n";
         for(int i=0; i<aiger->num_constraints; ++i) cout << constraints_prime[i] << " ";
         cout << endl;
-        // for(int i=0; i<ands.size(); ++i){
-        //     cout<<ands[i].o<<" ";
-        //     cout<<ands[i].i1<<" ";
-        //     cout<<ands[i].i2;
-        //     cout<<endl;
-        // }
+        for(int i=0; i<ands.size(); ++i){
+            cout<<ands[i].o<<" ";
+            cout<<ands[i].i1<<" ";
+            cout<<ands[i].i2;
+            cout<<endl;
+        }
     }
 
     if(aig_veb > 2)
         show_variables();
-
-    //show_aag();
 }
 
 void PDR::initialize_heuristic(){
@@ -405,7 +440,7 @@ void PDR::initialize(){
     initialize_heuristic();
 
     nQuery = nCTI = nCTG = nmic = nCoreReduced = nAbortJoin = nAbortMic = 0;
-    cout<<"c PDR constructed from aiger file [Finished] \n";
+    if(!no_output) cout<<"c PDR constructed from aiger file [Finished] \n";
 }
 
 void PDR::new_frame(){
@@ -461,7 +496,6 @@ void PDR::add_cube(Cube &cube, int k, bool to_all, bool ispropagate, int isigood
 }
 
 bool PDR::is_init(vector<int> &latches){
-    //cout << "init: ";
     if(init == nullptr){
         init = new CaDiCaL();
         // init = new minisatCore();
@@ -471,7 +505,6 @@ bool PDR::is_init(vector<int> &latches){
         init->assume(l);
     int res = init->solve();
     assert(res != 0);
-    //cout << "init fin";
     return (res == SAT);
 }
 
@@ -479,7 +512,6 @@ bool PDR::is_init(vector<int> &latches){
 // Fi /\ -latches /\ [constraints /\ -bad /\ T] /\ constraints' /\ latches'
 int core_ct = 0;
 bool PDR::is_inductive(SATSolver *solver, const Cube &latches, bool gen_core, bool reverse_assumption){
-    //cout << "ind:";
     solver->clear_act();
     vector<int> assumptions;
     int act = solver->max_var() + 1;
@@ -524,7 +556,6 @@ bool PDR::is_inductive(SATSolver *solver, const Cube &latches, bool gen_core, bo
         }
     }
     solver->set_clear_act();
-    //cout << "ind fin";
     return res;
 }
 
@@ -533,7 +564,6 @@ void PDR::encode_init_condition(SATSolver *s){
     for(int l : init_state){
         s->add(l); s->add(0);
     }
-
     if(constraints.size() >= 0){
         for(int l : constraints){
             s->add(l); s->add(0);}
@@ -547,7 +577,7 @@ void PDR::encode_init_condition(SATSolver *s){
             if(lit_set.find(a.o) == lit_set.end())
                 continue;
             lit_set.insert(abs(a.i1));
-            lit_set.insert(abs(a.i2));//??????
+            lit_set.insert(abs(a.i2));
 
             s->add(-a.o); s->add(a.i1);  s->add(0);
             s->add(-a.o); s->add(a.i2);  s->add(0);
@@ -624,7 +654,6 @@ void PDR::encode_translation(SATSolver *s, bool cons){
         for(auto i = ands.rbegin(); i != ands.rend(); ++i){
             And &a = *i;
             assert(a.o > 0);
-
             if(lit_set.find(a.o) != lit_set.end()){
                 lit_set.insert(abs(a.i1));
                 lit_set.insert(abs(a.i2));
@@ -633,7 +662,6 @@ void PDR::encode_translation(SATSolver *s, bool cons){
                 satelite->add(-a.o); satelite->add(a.i2);  satelite->add(0);
                 satelite->add(a.o);  satelite->add(-a.i1); satelite->add(-a.i2); satelite->add(0);
                 //cout << "andgate " << a.o <<  " " << a.i1 << " " << a.i2 << endl;
-
 
                 if(prime_lit_set.find(a.o) != prime_lit_set.end()){
                     int po  = prime_lit(a.o);
@@ -661,9 +689,78 @@ void PDR::encode_translation(SATSolver *s, bool cons){
     for(int l : satelite->simplified_cnf){
          s->add(l);
     }
-
     if(aig_veb > 2)
         cout<<"c add_cls finish load translation"<<endl;
+}
+
+void PDR::encode_lift(SATSolver *s){
+    if(satelite2 == nullptr){
+        satelite2 = new minisatSimp();
+        satelite2->var_enlarge_to(variables.size()-1);
+
+        for(int i=1; i<= nInputs+nLatches; ++i){
+            satelite2->set_frozen(1 + i);
+            satelite2->set_frozen(prime_var(1 + i));
+        }
+        satelite2->set_frozen(abs(bad));
+        satelite2->set_frozen(abs(bad_prime));
+        for(int i=0; i<constraints.size(); ++i){
+            assert(prime_var(abs(constraints[i])) == abs(constraints_prime[i]));
+            satelite2->set_frozen(abs(constraints[i]));
+            satelite2->set_frozen(abs(constraints_prime[i]));
+        }
+
+        set<int> prime_lit_set;
+        prime_lit_set.insert(abs(bad));
+        for(int l : constraints)
+            prime_lit_set.insert(abs(l));
+
+        set<int> lit_set(prime_lit_set.begin(), prime_lit_set.end());
+        for(int l : nexts)
+            lit_set.insert(abs(l));
+
+        satelite2->add(-1); satelite2->add(0);    // literal 1 is const 'T'
+        satelite2->add(-bad); satelite2->add(0);  // -bad must hold !
+
+        for(int i=0; i<nLatches; ++i){
+            int l = 1 + nInputs + i + 1;
+            int pl = prime_lit(l);
+            int next = nexts[i];
+            satelite2->add(-pl);satelite2->add(next); satelite2->add(0);
+            satelite2->add(-next); satelite2->add(pl); satelite2->add(0);
+        }
+
+        for(auto i = ands.rbegin(); i != ands.rend(); ++i){
+            And &a = *i;
+            assert(a.o > 0);
+
+            if(lit_set.find(a.o) != lit_set.end()){
+                lit_set.insert(abs(a.i1));
+                lit_set.insert(abs(a.i2));
+
+                satelite2->add(-a.o); satelite2->add(a.i1);  satelite2->add(0);
+                satelite2->add(-a.o); satelite2->add(a.i2);  satelite2->add(0);
+                satelite2->add(a.o);  satelite2->add(-a.i1); satelite2->add(-a.i2); satelite2->add(0);
+
+                if(prime_lit_set.find(a.o) != prime_lit_set.end()){
+                    int po  = prime_lit(a.o);
+                    int pi1 = prime_lit(a.i1);
+                    int pi2 = prime_lit(a.i2);
+
+                    prime_lit_set.insert(abs(a.i1));
+                    prime_lit_set.insert(abs(a.i2));
+                    satelite2->add(-po); satelite2->add(pi1);  satelite2->add(0);
+                    satelite2->add(-po); satelite2->add(pi2);  satelite2->add(0);
+                    satelite2->add(po);  satelite2->add(-pi1); satelite2->add(-pi2); satelite2->add(0);
+                }
+            }
+        }
+        satelite2->simplify();
+    }
+
+    for(int l : satelite2->simplified_cnf){
+         s->add(l);
+    }
 }
 
 // Lifts the pre-state on a given frame
@@ -675,13 +772,7 @@ void PDR::extract_state_from_sat(SATSolver *sat, State *s, State *succ){
     if(lift == nullptr){
         lift = new CaDiCaL();
         //lift = new minisatCore();
-        encode_translation(lift, true);
-
-        // notInvConstraints = lift->max_var() + 1;
-        // lift->add(-notInvConstraints);
-        // for(int l : constraints_prime)
-        //     lift->add(-l);
-        // lift->add(0);
+        encode_lift(lift);
     }
 
     lift->clear_act();
@@ -695,17 +786,14 @@ void PDR::extract_state_from_sat(SATSolver *sat, State *s, State *succ){
             s->inputs.push_back(ipt);
             assumptions.push_back(ipt);
         }
-        if(pipt != 0){
+        if(pipt > 0){
+            pipt = (pipt-distance);
             assumptions.push_back(pipt);
         }
-        // if(pipt > 0){
-        //     pipt = (pipt-distance);
-        //     assumptions.push_back(pipt);
-        // }
-        // else if (pipt < 0){
-        //     pipt = -(-pipt-distance);
-        //     assumptions.push_back(pipt);
-        // }
+        else if (pipt < 0){
+            pipt = -(-pipt-distance);
+            assumptions.push_back(pipt);
+        }
     }
     //int sz = assumptions.size();
 
@@ -713,7 +801,6 @@ void PDR::extract_state_from_sat(SATSolver *sat, State *s, State *succ){
         int l = sat->val(unprimed_first_dimacs + nInputs + i);
         if(l!=0){
             latches.push_back(l);
-            //s->latches.push_back(l);//!!!
             assumptions.push_back(l);
         }
     }
@@ -721,11 +808,10 @@ void PDR::extract_state_from_sat(SATSolver *sat, State *s, State *succ){
     // encoding -(constraints' /\ pre') <-> -constraints' \/ -pre'
     int act_var = lift->max_var() + 1;
     lift->add(-act_var);
-    // for(int l : constraints)
-    //     lift->add(-l);
+    for(int l : constraints)
+        lift->add(-l);
     for(int l : constraints_prime)
         lift->add(-l);
-    // lift->add(notInvConstraints);
 
     if(succ == nullptr)
         lift->add(-bad_prime);
@@ -735,21 +821,21 @@ void PDR::extract_state_from_sat(SATSolver *sat, State *s, State *succ){
     }
     lift->add(0);
 
-    // if(use_heuristic){
-    //     // stable_sort(assumptions.begin()+sz, assumptions.end(), *heuristic_lit_cmp);
-    //     // reverse(assumptions.begin(), assumptions.end());
-    //     stable_sort(assumptions.begin(), assumptions.end(), *heuristic_lit_cmp);
-    //     reverse(assumptions.begin(), assumptions.end());
-    // }
-    // else
-    //     stable_sort(assumptions.begin(), assumptions.end(), Lit_CMP());
+    if(use_heuristic){
+        // stable_sort(assumptions.begin()+sz, assumptions.end(), *heuristic_lit_cmp);
+        // reverse(assumptions.begin(), assumptions.end());
+        stable_sort(assumptions.begin(), assumptions.end(), *heuristic_lit_cmp);
+        reverse(assumptions.begin(), assumptions.end());
+    }
+    else
+        stable_sort(assumptions.begin(), assumptions.end(), Lit_CMP());
 
-    // for(int i=0; i<assumptions.size(); i++){
-    //     if(assumptions[i] >= nInputs+nLatches+2)
-    //         assumptions[i] = assumptions[i] + distance;
-    //     else if(assumptions[i] <= -(nInputs+nLatches+2))
-    //         assumptions[i] = assumptions[i] - distance;
-    // }
+    for(int i=0; i<assumptions.size(); i++){
+        if(assumptions[i] >= nInputs+nLatches+2)
+            assumptions[i] = assumptions[i] + distance;
+        else if(assumptions[i] <= -(nInputs+nLatches+2))
+            assumptions[i] = assumptions[i] - distance;
+    }
 
     lift->assume(act_var);
     for(int l : assumptions)
@@ -792,24 +878,24 @@ void PDR::extract_state_from_sat(SATSolver *sat, State *s, State *succ){
         cout << endl;
     }
 
-    // int last_index = 0, corelen = 0;
-    // if(true){
-    //     int core_literal = 0;
-    //     for(int i=0; i<assumptions.size(); i++){
-    //         int l = assumptions[i];
-    //         if(abs(l) >= nInputs+2 and abs(l) <= nInputs+nLatches+1) corelen++;
-    //         if(lift->failed(l)){
-    //             double score = (i-core_literal)/20.0;
-    //             if(score > 1.0) score = 1.05;
-    //             if(abs(l) < primed_first_dimacs)
-    //                 heuristic_lit_cmp->counts[abs(l)] += score; //score
-    //             else
-    //                 heuristic_lit_cmp->counts[abs(l)-distance] += score;
-    //             core_literal = i;
-    //             last_index = corelen;
-    //         }
-    //     }
-    // }
+    int last_index = 0, corelen = 0;
+    if(true){
+        int core_literal = 0;
+        for(int i=0; i<assumptions.size(); i++){
+            int l = assumptions[i];
+            if(abs(l) >= nInputs+2 and abs(l) <= nInputs+nLatches+1) corelen++;
+            if(lift->failed(l)){
+                double score = (i-core_literal)/20.0;
+                if(score > 1.0) score = 1.05;
+                if(abs(l) < primed_first_dimacs)
+                    heuristic_lit_cmp->counts[abs(l)] += score; //score
+                else
+                    heuristic_lit_cmp->counts[abs(l)-distance] += score;
+                core_literal = i;
+                last_index = corelen;
+            }
+        }
+    }
 
     for(int l : latches){
         if(lift->failed(l)){
@@ -845,18 +931,6 @@ bool PDR::get_pre_of_bad(State *s){
             else if(l < 0)
                 bad_state->latches.push_back(l+(primed_first_dimacs-unprimed_first_dimacs));
         }
-
-        State *temp = new State();
-        for(int i=0; i<nInputs; ++i){
-            int pipt = (frames[Fk].solver)->val(unprimed_first_dimacs + i);
-            temp->inputs.push_back(pipt);
-        }
-        for(int i=0; i<nLatches; ++i){
-            int l = (frames[Fk].solver)->val(unprimed_first_dimacs + nInputs + i);
-            temp->latches.push_back(l);
-        }
-        // cout << "State to bad" << endl;
-        // show_state(temp);
         extract_state_from_sat(frames[Fk].solver, s, nullptr);
         s->next = bad_state;
         return true;
@@ -909,7 +983,6 @@ bool PDR::rec_block_cube(){
 
             int k;
             for(k = obl.frame_k + 1; k<=depth(); ++k){
-                // cout<<"check inductive addCube "<<k<<endl;
                 if(!is_inductive(frames[k].solver, tmp_core, false)){
                     break;
                 }
@@ -939,7 +1012,6 @@ bool PDR::rec_block_cube(){
             ++nCTI;
             if(obl.frame_k == 0){
                 s->clear();
-                //extract_state_from_sat(sat, s, obl.state);
                 for(int i=0; i<nInputs; ++i){
                     int ipt = sat->val(unprimed_first_dimacs + i);
                     if(ipt != 0)
@@ -1001,6 +1073,7 @@ bool PDR::propagate(){
         if (output_stats_for_propagate)
             cout << "frame="<<i << " ckeep=" << ckeep << " cprop=" << cprop  << endl;
         if(frames[i].cubes.size() == 0){
+            if(RESULT != 0) return true;
             RESULT = 20;
             if(output_stats_for_frames)  show_frames();
             if(print_certifacate){
@@ -1014,9 +1087,9 @@ bool PDR::propagate(){
                     sort(cc.begin(), cc.end(), Lit_CMP());
                     reverse(cc.begin(), cc.end());
                     bool first_bit = 1;
-                    cout << "Cube: ";
+                    //cout << "Cube: ";
                     for(int l:cc){
-                        cout<< l << " ";
+                        //cout<< l << " ";
                         if(first_bit){
                             new_and_gate = l;
                             first_bit = 0;
@@ -1024,13 +1097,11 @@ bool PDR::propagate(){
                         }
                         int o = 1+nInputs+nLatches+nAnds+1;
                         ands.push_back(And(o, new_and_gate, l));
-                        cout << "addands " << o << " " << new_and_gate <<" "<< l << endl;
+                        //cout << "addands " << o << " " << new_and_gate <<" "<< l << endl;
                         new_and_gate = o;
                         nAnds++;
-
                     }
-                    cout << "new_and_gate = " << new_and_gate << endl << endl;
-
+                    //cout << "new_and_gate = " << new_and_gate << endl << endl;
                     if(first_cube){
                         invariant = -new_and_gate;
                         first_cube = 0;
@@ -1038,12 +1109,13 @@ bool PDR::propagate(){
                     }
                     int o = 1+nInputs+nLatches+nAnds+1;
                     ands.push_back(And(o, -new_and_gate, invariant));
-                    cout << "addands " << o << " " << -new_and_gate <<" "<< invariant << endl;
+                    //cout << "addands " << o << " " << -new_and_gate <<" "<< invariant << endl;
                     invariant = o;
                     nAnds++;
                 }
                 bad = -invariant;
-                show_aag();
+                if(aiger->binaryMode) show_aig();
+                    else show_aag();
             }
             return true;
         }
@@ -1072,7 +1144,7 @@ void PDR::mic(Cube &cube, int k, int depth){
     // }
 
     //drop literal
-    if(thread_index <= 1)  //线程0 1采用启发式排序
+    if(thread_index <= 1)  
         stable_sort(cube.begin(), cube.end(), *heuristic_lit_cmp);
     else
         random_shuffle(cube.begin(), cube.end());
@@ -1127,64 +1199,62 @@ bool PDR::CTG_down(Cube &cube, int k, int rec_depth, set<int> &required){
             }
             return true;
         }
-        else
-            return false;
-        // else{
-        //     if(rec_depth > option_ctg_max_depth)
-        //         return false;
-        //     State *s = new State();
-        //     State *succ = new State(cube, Cube());
-        //     extract_state_from_sat(sat, s, succ);
-        //     int breaked = false;
-        //     if(output_stats_for_ctg){
-        //         cout << "The new cube fails induction, find ctg ";
-        //         show_litvec(s->latches);
-        //     }
-        //     // CTG
-        //     if(ctg_ct < option_ctg_tries && k > 1 && !is_init(s->latches)
-        //         && is_inductive(frames[k-1].solver, s->latches, true)){
-        //         if(output_stats_for_ctg){
-        //             cout << "ctg satisfies induction, is lifted to ";
-        //             show_litvec(core);
-        //         }
-        //         Cube &ctg = core;
-        //         ctg_ct ++;
-        //         ++nCTG;
-        //         int i;
-        //         for(i=k; i<=depth(); ++i){
-        //             if(!is_inductive(frames[i].solver, ctg, false))
-        //                 break;
-        //         }
-        //         int Size =  ctg.size();
-        //         mic(ctg, i-1, rec_depth+1);
-        //         add_cube(ctg, i, true, false, i-k+1 + (ctg.size() < Size));
-        //     }else{
-        //         if(join_ct < option_max_joins){
-        //             ctg_ct=0;
-        //             join_ct++;
-        //             vector<int> join;
-        //             set<int> s_cti(s->latches.begin(), s->latches.end());
-        //             for(int i : cube){
-        //                 if(s_cti.find(i) != s_cti.end())
-        //                     join.push_back(i);
-        //                 else if(required.find(i) != required.end()){
-        //                     breaked = true;
-        //                     ++nAbortJoin;
-        //                     break;
-        //                 }
-        //             }
-        //             cube = join;
-        //             if(output_stats_for_ctg){
-        //                 cout << "breaked = "<< breaked << ", ctg cant be removed, join cube and ctg ";
-        //                 show_litvec(cube);
-        //             }
-        //         }else{
-        //             breaked = true;
-        //         }
-        //     }
-        //     delete s, succ;
-        //     if(breaked) return false;
-        // }
+        else{
+            if(rec_depth > option_ctg_max_depth)
+                return false;
+            State *s = new State();
+            State *succ = new State(cube, Cube());
+            extract_state_from_sat(sat, s, succ);
+            int breaked = false;
+            if(output_stats_for_ctg){
+                cout << "The new cube fails induction, find ctg ";
+                show_litvec(s->latches);
+            }
+            // CTG
+            if(ctg_ct < option_ctg_tries && k > 1 && !is_init(s->latches)
+                && is_inductive(frames[k-1].solver, s->latches, true)){
+                if(output_stats_for_ctg){
+                    cout << "ctg satisfies induction, is lifted to ";
+                    show_litvec(core);
+                }
+                Cube &ctg = core;
+                ctg_ct ++;
+                ++nCTG;
+                int i;
+                for(i=k; i<=depth(); ++i){
+                    if(!is_inductive(frames[i].solver, ctg, false))
+                        break;
+                }
+                int Size =  ctg.size();
+                mic(ctg, i-1, rec_depth+1);
+                add_cube(ctg, i, true, false, i-k+1 + (ctg.size() < Size));
+            }else{
+                if(join_ct < option_max_joins){
+                    ctg_ct=0;
+                    join_ct++;
+                    vector<int> join;
+                    set<int> s_cti(s->latches.begin(), s->latches.end());
+                    for(int i : cube){
+                        if(s_cti.find(i) != s_cti.end())
+                            join.push_back(i);
+                        else if(required.find(i) != required.end()){
+                            breaked = true;
+                            ++nAbortJoin;
+                            break;
+                        }
+                    }
+                    cube = join;
+                    if(output_stats_for_ctg){
+                        cout << "breaked = "<< breaked << ", ctg cant be removed, join cube and ctg ";
+                        show_litvec(cube);
+                    }
+                }else{
+                    breaked = true;
+                }
+            }
+            delete s, succ;
+            if(breaked) return false;
+        }
     }
 }
 
@@ -1253,13 +1323,13 @@ int PDR::check(){
 
     if(!check_BMC0()) {
         if(!no_output) cout << "Thread " << thread_index << " check BMC0 failed" << endl;
-        if(!share_memory_test  || thread_index == 1) RESULT = 10;
+        RESULT = 10;
         return 10;
     }
     if(!no_output) cout << "Thread " << thread_index << " check BMC0 successed" << endl;
     if(!check_BMC1()) {
         if(!no_output) cout << "Thread " << thread_index << " check BMC1 failed" << endl;
-        if(!share_memory_test  || thread_index == 1) RESULT = 10;
+        RESULT = 10;
         return 10;
     }
     if(!no_output) cout << "Thread " << thread_index << " check BMC1 successed" << endl;
@@ -1272,9 +1342,7 @@ int PDR::check(){
     int result = 10;
     int ct = 0;
     while(true){
-        //同步其他线程结果
         if(RESULT!=0) return RESULT;
-        //线程交互
         if(share_memory and main_thread_index >= 0){
             while(!cube_register[main_thread_index][depth()].empty()){
                 if(RESULT!=0) return RESULT;
@@ -1373,94 +1441,4 @@ int PDR::check(){
     frames.clear();
 
     return result;
-}
-
-
-
-
-
-
-
-void PDR::encode_translation2(SATSolver *s, bool cons){
-    if(satelite2 == nullptr){
-        satelite2 = new minisatSimp();
-        satelite2->var_enlarge_to(variables.size()-1);
-
-        for(int i=1; i<= nInputs+nLatches; ++i){
-            satelite2->set_frozen(1 + i);
-            satelite2->set_frozen(prime_var(1 + i));
-        }
-        satelite2->set_frozen(abs(bad));
-        satelite2->set_frozen(abs(bad_prime));
-        for(int i=0; i<constraints.size(); ++i){
-            assert(prime_var(abs(constraints[i])) == abs(constraints_prime[i]));
-            satelite2->set_frozen(abs(constraints[i]));
-            satelite2->set_frozen(abs(constraints_prime[i]));
-        }
-
-        set<int> prime_lit_set;
-        prime_lit_set.insert(abs(bad));
-        for(int l : constraints)
-            prime_lit_set.insert(abs(l));
-
-        set<int> lit_set(prime_lit_set.begin(), prime_lit_set.end());
-        // for(int l : nexts)
-        //     lit_set.insert(abs(l));
-
-        satelite2->add(-1); satelite2->add(0);    // literal 1 is const 'T'
-        //satelite2->add(-bad); satelite2->add(0);  // -bad must hold !
-        //for(int l : constraints){satelite2->add(l);satelite2->add(0);}
-        if(cons){satelite2->add(constraints[3]);satelite2->add(0);}
-        //for(int l : constraints_prime){satelite2->add(l); satelite2->add(0);}
-        // for(int i=0; i<nLatches; ++i){
-        //     int l = 1 + nInputs + i + 1;
-        //     int pl = prime_lit(l);
-        //     int next = nexts[i];
-        //     satelite2->add(-pl);satelite2->add(next); satelite2->add(0);
-        //     satelite2->add(-next); satelite2->add(pl); satelite2->add(0);
-        // }
-
-        for(auto i = ands.rbegin(); i != ands.rend(); ++i){
-            And &a = *i;
-            assert(a.o > 0);
-
-            if(lit_set.find(a.o) != lit_set.end()){
-                lit_set.insert(abs(a.i1));
-                lit_set.insert(abs(a.i2));
-
-                satelite2->add(-a.o); satelite2->add(a.i1);  satelite2->add(0);
-                satelite2->add(-a.o); satelite2->add(a.i2);  satelite2->add(0);
-                satelite2->add(a.o);  satelite2->add(-a.i1); satelite2->add(-a.i2); satelite2->add(0);
-                cout << "andgate " << a.o <<  " " << a.i1 << " " << a.i2 << endl;
-
-
-                // if(prime_lit_set.find(a.o) != prime_lit_set.end()){
-                //     int po  = prime_lit(a.o);
-                //     int pi1 = prime_lit(a.i1);
-                //     int pi2 = prime_lit(a.i2);
-
-                //     prime_lit_set.insert(abs(a.i1));
-                //     prime_lit_set.insert(abs(a.i2));
-                //     satelite2->add(-po); satelite2->add(pi1);  satelite2->add(0);
-                //     satelite2->add(-po); satelite2->add(pi2);  satelite2->add(0);
-                //     satelite2->add(po);  satelite2->add(-pi1); satelite2->add(-pi2); satelite2->add(0);
-                //     cout << "andgate " << po <<  " " << pi1 << " " << pi2 << endl;
-                // }
-            }
-        }
-        satelite2->simplify();
-        for(int l : satelite2->simplified_cnf){
-            cout << l << " ";
-            if(l == 0){
-                cout << endl;
-            }
-        }
-    }
-
-    for(int l : satelite2->simplified_cnf){
-         s->add(l);
-    }
-    
-    if(aig_veb > 2)
-        cout<<"c add_cls finish load translation"<<endl;
 }

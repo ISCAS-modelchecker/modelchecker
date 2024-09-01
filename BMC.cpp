@@ -93,7 +93,7 @@ void BMC::encode_init_condition(SATSolver *s){
             if(lit_set.find(a.o) == lit_set.end())
                 continue;
             lit_set.insert(abs(a.i1));
-            lit_set.insert(abs(a.i2));//??????
+            lit_set.insert(abs(a.i2));
             
             s->add(-a.o); s->add(a.i1);  s->add(0);
             s->add(-a.o); s->add(a.i2);  s->add(0);
@@ -391,7 +391,6 @@ void BMC::initialize(){
 
 //check all frames
 int BMC::check(){
-    //proof_obligation[0] = 0;
     int res;
     for(bmc_frame_k = 1; bmc_frame_k <= nframes; bmc_frame_k++){
         if(RESULT!=0) return RESULT; // bmc pursue pdr 1
@@ -433,21 +432,8 @@ int BMC::solve_one_frame(){
         bmcSolver->add(a.o);  bmcSolver->add(-a.i1); bmcSolver->add(-a.i2); bmcSolver->add(0);
     }
 
-    // // bmc pursue pdr 2
-    // for(int i=0; i<99999; i++){
-    //     if(proof_obligation[i] != 0)    
-    //         //bmcSolver->add(-value(proof_obligation[i]));
-    //         cout << -value(proof_obligation[i]) << " ";
-    //     else
-    //         break;
-    // }
-    // bmcSolver->add(0);
-
-    // cout << proof_obligation[0] << endl;
-
     bmcSolver->assume(bad);
     int result = bmcSolver->solve();
-    //if(PEBMC_step < bmc_frame_k) PEBMC_step = bmc_frame_k;
     if(result == 20){
         if(bmc_frame_k < 10 || bmc_frame_k % 20 == 0) cout << "frames = "<< bmc_frame_k <<", bad = " << bad << ", res = " << result << endl;
         bmcSolver->add(-bad); bmcSolver->add(0); 
@@ -457,6 +443,5 @@ int BMC::solve_one_frame(){
         RESULT = 10;     
     }
     else cout << "???" << result << endl;
-    //cout << "PEBMC_step = " << PEBMC_step << endl;
     return result;
 }

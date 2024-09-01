@@ -280,6 +280,7 @@ class PDR
     
     // for IC3
     minisatSimp *satelite = nullptr;
+    minisatSimp *satelite2 = nullptr;
     CaDiCaL *lift = nullptr;
     CaDiCaL *init = nullptr;
     CaDiCaL *checker = nullptr;
@@ -312,9 +313,6 @@ public:
     // for incremental check
     bool first_incremental_check;
 
-    //share_thread
-    //boost::lockfree::spsc_queue<shared_ptr<clause_store>, boost::lockfree::capacity<10240000>> import_clause;
-
     PDR(Aiger *aiger, int Thread_index): aiger(aiger), thread_index(Thread_index){
         start_time = std::chrono::steady_clock::now();
         first_incremental_check = 1;
@@ -322,7 +320,6 @@ public:
         if(Thread_index == 1)   main_thread_index = 0;
             else if(Thread_index == 4)   main_thread_index = 1;
             else main_thread_index = -1;
-        
     }
     ~PDR(){
         if(satelite != nullptr) delete satelite;
@@ -357,13 +354,11 @@ public:
     int check();
     int incremental_check();
     int incremental_check2();
-    
 
     void encode_init_condition(SATSolver *s);   // I
     void encode_bad_state(SATSolver *s);        // Bad cone, used for test SAT?[I/\-B]
     void encode_translation(SATSolver *s, bool cons = true);      // Latches' Cone + Bad' cone, -Bad must hold
-    void encode_translation2(SATSolver *s, bool cons = true); 
-    minisatSimp *satelite2 = nullptr;
+    void encode_lift(SATSolver *s);
 
     void clear_po();
     void add_cube(Cube &cube, int k, bool to_all=true, bool ispropagate = false, int isigoodlemma = 0);
@@ -372,9 +367,9 @@ public:
     bool state_is_null(State *s){return s->latches.size() == 0;}
     double get_runtime();
 
-
     // log
     void show_aag();
+    void show_aig();
     void show_state(State *s);
     string return_state(State *s);
     string return_input(State *s);
@@ -388,10 +383,8 @@ public:
     string return_litvec(vector<int> &lv) const;
     void show_frames();
 
-
     //heuristic function
     void initialize_heuristic();
     void updateLitOrder(Cube &cube, int level);
-
 };
 

@@ -5,7 +5,7 @@
 
 #define no_output 1
 #define print_witness 1
-#define print_certifacate 1
+#define print_certifacate 0
 #define output_stats_for_recblock 0
 #define output_stats_for_heuristic 0
 #define output_stats_for_extract 0
@@ -17,7 +17,7 @@
 #define output_stats_for_conclusion 0
 #define use_heuristic 1
 #define use_earliest_strengthened_frame 1
-#define use_punishment 0
+#define use_punishment 1
 
 #define unfold_ands 0
 #define unfold_latches 0
@@ -26,7 +26,7 @@
 #define use_heuristic_igoodlemma 1
 #define refer_skip 0
 #define thread_4 0          //并行PDR的线程数 1表示4线程
-#define thread_8 0         //并行PDR的线程数 1表示8线程
+#define thread_8 1         //并行PDR的线程数 1表示8线程
 #define share_memory 0     //判断线程间是否共享信息
 #define share_memory_test 0   //线程1-3结束后不记录验证结果 只记录线程0（信息共享线程）的最终结果
 

@@ -33,6 +33,8 @@ public:
     unsigned num_justice;       // the number of justices.
     unsigned num_fairness;      // the number of fairness.
 
+    bool binaryMode;
+
     vector<unsigned> inputs, outputs, bads, constraints;
     vector<Aiger_latches> latches;
     vector<Aiger_and> ands;

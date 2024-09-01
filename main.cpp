@@ -41,15 +41,16 @@ int main(int argc, char **argv){
     //freopen("freopen.out","w",stdout);
     auto t_begin = system_clock::now();
     if(!no_output) cout<<"c USAGE: ./modelchecker <aig-file> [propertyIndex]\n";
-    char *fold = aiger_fold(argv[1], 33333331);
-    Aiger *aiger = load_aiger_from_file(string(fold));
+    Aiger *aiger = load_aiger_from_file(string(argv[1]));
+    //char *fold = aiger_fold(argv[1], 33333331);
+    //printf("%s\n", fold);
+    //Aiger *aiger = load_aiger_from_file(string(fold));
     int property_index = 0;
     if(argc > 2){
         property_index = (unsigned) atoi(argv[2]);
     }
          
     pthread_t tpdr1, tpdr2, tpdr3, tpdr4, tbmc;
-    
     
     int ret = pthread_create (&tpdr1, NULL, thread_start_pdr, (void *)aiger); 
     if(thread_4){

@@ -2553,6 +2553,7 @@ char *aiger_fold(char *path, unsigned seed) {
   FILE *out = fopen(fname, "w");
   if (out) {
     aiger_write_to_file(foldAig, aiger_binary_mode, out);
+    fclose(out);
     return fname;
   } else return NULL;
 }

@@ -29,6 +29,7 @@ Aiger::Aiger(){
     num_ands = 0;
     num_constraints = 0;
     num_latches = 0;
+    binaryMode = 0;
 
     ands.clear();
     latches.clear();
@@ -93,10 +94,12 @@ Aiger* load_aiger_from_file(string str){
     fin.close();
 
     bool binary_mode = false;
+    aiger->binaryMode = 0;
     assert(*fbuf == 'a');
     fbuf++;
     if(*fbuf == 'i'){
         binary_mode = true;
+        aiger->binaryMode = 1;
     }else{
         assert(*fbuf == 'a');
     }
