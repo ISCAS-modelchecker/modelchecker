@@ -398,7 +398,8 @@ int BMC::check(){
         res = solve_one_frame();
         if (res == 10) {
             uaiger->show_statistics();
-            cout << "Output was asserted in frame." << endl;
+            cout << 1 << endl;
+            if(!no_output) cout << "Output was asserted in frame." << endl;
             return 10;
         }   
     } 

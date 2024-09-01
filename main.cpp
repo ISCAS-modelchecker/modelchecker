@@ -23,7 +23,7 @@ void *thread_start_bmc(void *aiger){
     BMC bmc(aiger_data, 0, nframes);
     bmc.initialize();
     int res_bmc = bmc.check(); 
-    cout << "res_bmc = " << res_bmc << endl;
+    if(!no_output) cout << "res_bmc = " << res_bmc << endl;
     pthread_exit(NULL); 
 }
 
