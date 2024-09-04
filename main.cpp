@@ -21,7 +21,6 @@ void *thread_start_bmc(void *aiger){
     int nframes = INT_MAX;
     Aiger* aiger_data = ((Aiger *)aiger); 
     BMC bmc(aiger_data, 0, nframes);
-    bmc.initialize();
     int res_bmc = bmc.check(); 
     if(!no_output) cout << "res_bmc = " << res_bmc << endl;
     pthread_exit(NULL); 
@@ -52,25 +51,25 @@ int main(int argc, char **argv){
          
     pthread_t tpdr1, tpdr2, tpdr3, tpdr4, tbmc;
     
-    int ret = pthread_create (&tpdr1, NULL, thread_start_pdr, (void *)aiger); 
+    if(thread_pdr) 
+        int ret = pthread_create (&tpdr1, NULL, thread_start_pdr, (void *)aiger); 
     if(thread_4){
         int ret2 = pthread_create (&tpdr2, NULL, thread_start_pdr, (void *)aiger); 
         int ret3 = pthread_create (&tpdr3, NULL, thread_start_pdr, (void *)aiger); 
         int ret4 = pthread_create (&tpdr4, NULL, thread_start_pdr, (void *)aiger); 
     }
-    if(thread_8){
+    if(thread_bmc)
         int ret5 = pthread_create (&tbmc, NULL, thread_start_bmc, (void *)aiger); 
-    }
 
-    pthread_join(tpdr1, NULL);
+    if(thread_pdr) 
+        pthread_join(tpdr1, NULL);
     if(thread_4){
         pthread_join(tpdr2, NULL);
         pthread_join(tpdr3, NULL);
         pthread_join(tpdr4, NULL);
     }
-    if(thread_8){
+    if(thread_bmc)
         pthread_join(tbmc, NULL);
-    }
 
     if(RESULT  == 10 and !no_output)
         cout << 1 << endl;

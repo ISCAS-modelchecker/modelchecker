@@ -11,14 +11,14 @@
 #include "basic.hpp"
 #include "sat_solver.hpp"
 #include <atomic>
+#include <mutex>
 using namespace std;
 
 #ifndef TIMESTAMP
 #define TIMESTAMP
     extern unsigned long long state_count;
     extern int RESULT; // 0 means safe in PORTFOLIO; 10 means find a bug; 20 proves safety
-    extern int max_step;
-    //extern int* proof_obligation;
+    extern std::mutex result_mutex;  // 定义一个互斥锁
 #endif
 
 // save information for debug
@@ -287,6 +287,7 @@ class PDR
     //minisatCore *lift = nullptr;
     // minisatCore *init = nullptr;
     int notInvConstraints;
+    bool satelite_unsat;
 
     State *cex_state_idx = nullptr;
     bool find_cex = false;
@@ -320,6 +321,7 @@ public:
         if(Thread_index == 1)   main_thread_index = 0;
             else if(Thread_index == 4)   main_thread_index = 1;
             else main_thread_index = -1;
+        satelite_unsat = 0;
     }
     ~PDR(){
         if(satelite != nullptr) delete satelite;

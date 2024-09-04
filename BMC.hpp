@@ -28,7 +28,7 @@ public:
 
 class UnfoldAiger{
 public:
-    vector<int> inputs, outputs, constraints;
+    vector<int> inputs, outputs, constraints, init;
     vector<And> ands;
     vector<Variable> unfold_variables;
     vector<Node> nodes;
@@ -131,6 +131,7 @@ public:
     int nframes;
     vector<int> values;   // real value of each node 与variables一一对应
     int tempvalue[999999];
+    bool check_init;
 
     //for BMC solve
     CaDiCaL *bmcSolver = nullptr;
@@ -143,6 +144,7 @@ public:
     BMC(Aiger *aiger, int property_index, int nframes): aiger(aiger), property_index(property_index), nframes(nframes){
         start_time = std::chrono::steady_clock::now();  
         allbad.clear();
+        check_init = 0;
     }
     ~BMC(){
         if(bmcSolver != nullptr) delete bmcSolver;

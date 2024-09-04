@@ -5,23 +5,13 @@
 #include <algorithm>
 #include <queue>
 #include <boost/lockfree/spsc_queue.hpp>
+#include <mutex>
 
+std::mutex result_mutex;  // 定义一个互斥锁
 unsigned long long state_count = 0;
 int RESULT = 0; // 0 means safe in PORTFOLIO; 10 means find a bug; 20 proves safety
 boost::lockfree::spsc_queue<share_Cube, boost::lockfree::capacity<500000>> cube_producer[2][8]; //两个主线程 共享 八个子线程的子句
 queue<share_Cube> cube_register[2][9999];
-
-string encode(string str, unsigned x){
-    unsigned char ch;
-    while (x & ~0x7f){
-        ch = (x & 0x7f) | 0x80;
-        str += ch;
-        x >>= 7;
-    }
-    ch = x;
-    str += ch;
-    return str;
-}
 
 //  Log functions
 // --------------------------------------------
@@ -177,45 +167,95 @@ void PDR::show_PO(){
 }
 
 void PDR::show_frames(){
-    int k=0;
+    int k=0, safe=0;
     cout<<endl;
     for(Frame & f: frames){
         cout << "Level " << k++ <<" (cubeCount = " << f.cubes.size();
         cout<<" varCount =  "<<f.solver->max_var()<<" ";
         cout << ") :" << endl;
+        if(k == 1) continue;
+        if(f.cubes.size() == 0) {
+            safe=1;continue;
+        }
+        if(safe==0) continue;
+        
         for(const Cube &c : f.cubes){
             Cube cc = c;
             show_litvec(cc);
         }
+        safe=0;
     }
     cout<<"\n * ======="<<endl;
 }
 
 void PDR::show_aag(){
-    printf("aag %d %d %d 0 %d 1", nInputs + nLatches + nAnds, nInputs, nLatches, nAnds);
+    std::ofstream file("certificate.aag");
+    if (!file.is_open()) {
+        std::cerr << "Error: Could not open file " << "certificate.aag" << " for writing." << std::endl;
+        return;
+    }    
+    // 输出AAG格式的头部
+    file << "aag " << (nInputs + nLatches + nAnds) << " " << nInputs << " " << nLatches << " 0 " << nAnds << " 1";
     if(constraints.size()>0){
-        cout<<" "<< constraints.size();
-    }cout<<endl;
-
-    for(int i=1; i<=nInputs; ++i)
-        cout<<2*i<<endl;
-    for(int i=1; i<=nLatches; ++i){
-        cout<<2*(nInputs+i)<<" "<<dimacs_to_aiger(nexts[i-1]);
-        if(aiger->latches[i-1].default_val != 0)
-            cout<<" "<<aiger->latches[i-1].default_val;
-        cout<<endl;
+        file << " " << constraints.size();
     }
-
-    cout<<dimacs_to_aiger(bad)<<endl;
-    for(int i=0; i<constraints.size(); ++i)
-        cout<<dimacs_to_aiger(constraints[i])<<endl;
-
-    for(int i=0; i<ands.size(); ++i){
-        cout<<dimacs_to_aiger(ands[i].o)<<" ";
-        cout<<dimacs_to_aiger(ands[i].i1)<<" ";
-        cout<<dimacs_to_aiger(ands[i].i2);
-        cout<<endl;
+    file << std::endl;
+    // 输出输入变量
+    for(int i = 1; i <= nInputs; ++i) {
+        file << 2 * i << std::endl;
     }
+    // 输出寄存器（latches）
+    for(int i = 1; i <= nLatches; ++i) {
+        file << 2 * (nInputs + i) << " " << dimacs_to_aiger(nexts[i-1]);
+        if(aiger->latches[i-1].default_val != 0) {
+            file << " " << aiger->latches[i-1].default_val;
+        }
+        file << std::endl;
+    }
+    // 输出 bad 信号
+    file << dimacs_to_aiger(bad) << std::endl;
+    // 输出约束
+    for(int i = 0; i < constraints.size(); ++i) {
+        file << dimacs_to_aiger(constraints[i]) << std::endl;
+    }
+    // 输出 AND 门
+    for(int i = 0; i < ands.size(); ++i) {
+        file << dimacs_to_aiger(ands[i].o) << " ";
+        file << dimacs_to_aiger(ands[i].i1) << " ";
+        file << dimacs_to_aiger(ands[i].i2) << std::endl;
+    }
+    // 关闭文件
+    file.close(); 
+    // 调用aigtoaig工具将生成的AAG文件转换为AIG文件
+    //if(aiger->binaryMode){
+    std::string command = "./aigtoaig certificate.aag certificate.aig";
+    int result = system(command.c_str());
+    //}
+
+    // printf("aag %d %d %d 0 %d 1", nInputs + nLatches + nAnds, nInputs, nLatches, nAnds);
+    // if(constraints.size()>0){
+    //     cout<<" "<< constraints.size();
+    // }cout<<endl;
+
+    // for(int i=1; i<=nInputs; ++i)
+    //     cout<<2*i<<endl;
+    // for(int i=1; i<=nLatches; ++i){
+    //     cout<<2*(nInputs+i)<<" "<<dimacs_to_aiger(nexts[i-1]);
+    //     if(aiger->latches[i-1].default_val != 0)
+    //         cout<<" "<<aiger->latches[i-1].default_val;
+    //     cout<<endl;
+    // }
+    
+    // cout<<dimacs_to_aiger(bad)<<endl;
+    // for(int i=0; i<constraints.size(); ++i)
+    //     cout<<dimacs_to_aiger(constraints[i])<<endl;
+
+    // for(int i=0; i<ands.size(); ++i){
+    //     cout<<dimacs_to_aiger(ands[i].o)<<" ";
+    //     cout<<dimacs_to_aiger(ands[i].i1)<<" ";
+    //     cout<<dimacs_to_aiger(ands[i].i2);
+    //     cout<<endl;
+    // }
 }
 
 void PDR::show_aig(){
@@ -238,7 +278,6 @@ void PDR::show_aig(){
     string str;
     for(int i=0; i<ands.size(); ++i){
         int d1 = dimacs_to_aiger(ands[i].o) - dimacs_to_aiger(ands[i].i1);
-        cout<<encode(str, 1) << " ";
         cout<<dimacs_to_aiger(ands[i].i1) - dimacs_to_aiger(ands[i].i2);
         cout<<endl;
     }
@@ -640,7 +679,10 @@ void PDR::encode_translation(SATSolver *s, bool cons){
         satelite->add(-1); satelite->add(0);    // literal 1 is const 'T'
         satelite->add(-bad); satelite->add(0);  // -bad must hold !
         if(cons){
-            for(int l : constraints){satelite->add(l);satelite->add(0);}
+            for(int l : constraints){
+                if(l == bad) satelite_unsat = true;
+                satelite->add(l);satelite->add(0);
+            }
         }
         //for(int l : constraints_prime){satelite->add(l); satelite->add(0);}
         for(int i=0; i<nLatches; ++i){
@@ -689,6 +731,7 @@ void PDR::encode_translation(SATSolver *s, bool cons){
     for(int l : satelite->simplified_cnf){
          s->add(l);
     }
+    if(satelite_unsat) {s->add(1);s->add(0);}
     if(aig_veb > 2)
         cout<<"c add_cls finish load translation"<<endl;
 }
@@ -755,6 +798,16 @@ void PDR::encode_lift(SATSolver *s){
                 }
             }
         }
+        if(split_ands){
+            notInvConstraints = satelite2->max_var() + 1;
+            satelite2->set_frozen(notInvConstraints);
+            satelite2->add(-notInvConstraints);
+            for(int l : constraints_prime)
+                satelite2->add(-l);
+            for(int l : constraints)
+                satelite2->add(-l);
+            satelite2->add(0);
+        }
         satelite2->simplify();
     }
 
@@ -795,7 +848,7 @@ void PDR::extract_state_from_sat(SATSolver *sat, State *s, State *succ){
             assumptions.push_back(pipt);
         }
     }
-    //int sz = assumptions.size();
+    int sz = assumptions.size();
 
     for(int i=0; i<nLatches; ++i){
         int l = sat->val(unprimed_first_dimacs + nInputs + i);
@@ -808,11 +861,14 @@ void PDR::extract_state_from_sat(SATSolver *sat, State *s, State *succ){
     // encoding -(constraints' /\ pre') <-> -constraints' \/ -pre'
     int act_var = lift->max_var() + 1;
     lift->add(-act_var);
-    for(int l : constraints)
-        lift->add(-l);
-    for(int l : constraints_prime)
-        lift->add(-l);
-
+    if(split_ands)
+        lift->add(notInvConstraints);
+    else{
+        for(int l : constraints)
+            lift->add(-l);
+        for(int l : constraints_prime)
+            lift->add(-l);
+    }
     if(succ == nullptr)
         lift->add(-bad_prime);
     else{
@@ -821,11 +877,13 @@ void PDR::extract_state_from_sat(SATSolver *sat, State *s, State *succ){
     }
     lift->add(0);
 
-    if(use_heuristic){
-        // stable_sort(assumptions.begin()+sz, assumptions.end(), *heuristic_lit_cmp);
-        // reverse(assumptions.begin(), assumptions.end());
+    if(use_heuristic and assumption_allsort){
         stable_sort(assumptions.begin(), assumptions.end(), *heuristic_lit_cmp);
         reverse(assumptions.begin(), assumptions.end());
+    }
+    else if(use_heuristic){
+        stable_sort(assumptions.begin()+sz, assumptions.end(), *heuristic_lit_cmp);
+        reverse(assumptions.begin()+sz, assumptions.end());
     }
     else
         stable_sort(assumptions.begin(), assumptions.end(), Lit_CMP());
@@ -878,24 +936,24 @@ void PDR::extract_state_from_sat(SATSolver *sat, State *s, State *succ){
         cout << endl;
     }
 
-    int last_index = 0, corelen = 0;
-    if(true){
-        int core_literal = 0;
-        for(int i=0; i<assumptions.size(); i++){
-            int l = assumptions[i];
-            if(abs(l) >= nInputs+2 and abs(l) <= nInputs+nLatches+1) corelen++;
-            if(lift->failed(l)){
-                double score = (i-core_literal)/20.0;
-                if(score > 1.0) score = 1.05;
-                if(abs(l) < primed_first_dimacs)
-                    heuristic_lit_cmp->counts[abs(l)] += score; //score
-                else
-                    heuristic_lit_cmp->counts[abs(l)-distance] += score;
-                core_literal = i;
-                last_index = corelen;
-            }
-        }
-    }
+    // int last_index = 0, corelen = 0;
+    // if(true){
+    //     int core_literal = 0;
+    //     for(int i=0; i<assumptions.size(); i++){
+    //         int l = assumptions[i];
+    //         if(abs(l) >= nInputs+2 and abs(l) <= nInputs+nLatches+1) corelen++;
+    //         if(lift->failed(l)){
+    //             double score = (i-core_literal)/20.0;
+    //             if(score > 1.0) score = 1.05;
+    //             if(abs(l) < primed_first_dimacs)
+    //                 heuristic_lit_cmp->counts[abs(l)] += score; //score
+    //             else
+    //                 heuristic_lit_cmp->counts[abs(l)-distance] += score;
+    //             core_literal = i;
+    //             last_index = corelen;
+    //         }
+    //     }
+    // }
 
     for(int l : latches){
         if(lift->failed(l)){
@@ -914,7 +972,6 @@ bool PDR::get_pre_of_bad(State *s){
     frames[Fk].solver->assume(bad_prime);
     int res = frames[Fk].solver->solve();
     ++nQuery;
-
     if(res == SAT){
         State *bad_state = new State();
         for(int i=0; i<nInputs; ++i){
@@ -1075,13 +1132,27 @@ bool PDR::propagate(){
         if(frames[i].cubes.size() == 0){
             if(RESULT != 0) return true;
             RESULT = 20;
+            int invariant;
+            int new_and_gate;
+            bool first_cube = 1;
+            Cube badcube;
+            badcube.clear();
+            badcube.push_back(bad);
+            frames[i+1].cubes.insert(badcube);
+            for(int l:constraints){
+                badcube.clear();
+                badcube.push_back(-l);
+                frames[i+1].cubes.insert(badcube);
+            }
             if(output_stats_for_frames)  show_frames();
             if(print_certifacate){
-                int invariant;
-                int new_and_gate;
-                bool first_cube = 1;
+                for(int d = i+2; d <= depth()+1; d++){
+                    for(const Cube &c : frames[d].cubes)
+                        frames[i+1].cubes.insert(c);
+                }
                 for(const Cube &c : frames[i+1].cubes){
                     Cube cc = c;
+                    if(cc.size() == 0) cc.push_back(-1);
                     //cc.push_back(-11);
                     //cc.push_back(10);
                     sort(cc.begin(), cc.end(), Lit_CMP());
@@ -1096,7 +1167,8 @@ bool PDR::propagate(){
                             continue;
                         }
                         int o = 1+nInputs+nLatches+nAnds+1;
-                        ands.push_back(And(o, new_and_gate, l));
+                        if(abs(new_and_gate) > abs(l)) ands.push_back(And(o, new_and_gate, l));
+                        else ands.push_back(And(o, l, new_and_gate));
                         //cout << "addands " << o << " " << new_and_gate <<" "<< l << endl;
                         new_and_gate = o;
                         nAnds++;
@@ -1108,14 +1180,16 @@ bool PDR::propagate(){
                         continue;
                     }
                     int o = 1+nInputs+nLatches+nAnds+1;
-                    ands.push_back(And(o, -new_and_gate, invariant));
+                    if(abs(new_and_gate) > abs(invariant)) ands.push_back(And(o, -new_and_gate, invariant));
+                    else ands.push_back(And(o, invariant, -new_and_gate));
                     //cout << "addands " << o << " " << -new_and_gate <<" "<< invariant << endl;
                     invariant = o;
                     nAnds++;
                 }
                 bad = -invariant;
-                if(aiger->binaryMode) show_aig();
-                    else show_aag();
+                show_aag();
+                // if(aiger->binaryMode) show_aig();
+                //     else show_aag();
             }
             return true;
         }
@@ -1279,6 +1353,16 @@ bool PDR::check_BMC0(){
     int res = sat0->solve();
     if(res == SAT) {
         find_cex = true;
+        State *s = new State();
+        for(int i=0; i<nInputs; ++i){
+            int ipt = sat0->val(unprimed_first_dimacs + i);
+            if(ipt != 0) s->inputs.push_back(ipt);
+        }
+        for(int i=0; i<nLatches; ++i){
+            int l = sat0->val(unprimed_first_dimacs + nInputs + i);
+            if(l != 0) s->latches.push_back(l);
+        }
+        cex_states.push_back(s);
         delete sat0;
         return false;
     }
@@ -1305,14 +1389,37 @@ bool PDR::check_BMC1(){
     if(res1 == SAT){
         find_cex = true;
         State *s = new State();
-        for(int i=0; i<nInputs; ++i)
-            s->inputs.push_back(sat1->val(unprimed_first_dimacs + i));
-        for(int i=0; i<nLatches; ++i)
-            s->latches.push_back(sat1->val(unprimed_first_dimacs + nInputs + i));
+        for(int i=0; i<nInputs; ++i){
+            int ipt = sat1->val(unprimed_first_dimacs + i);
+            if(ipt != 0) s->inputs.push_back(ipt);
+        }
+        for(int i=0; i<nLatches; ++i){
+            int l = sat1->val(unprimed_first_dimacs + nInputs + i);
+            if(l != 0) s->latches.push_back(l);
+        }
+
+        State *ps = new State();
+        for(int i=0; i<nInputs; ++i){
+            int pipt = sat1->val(primed_first_dimacs + i);
+            if(pipt > 0)
+                ps->inputs.push_back(pipt-(primed_first_dimacs-unprimed_first_dimacs));
+            else if(pipt < 0)
+                ps->inputs.push_back(pipt+(primed_first_dimacs-unprimed_first_dimacs));
+        }
+        for(int i=0; i<nLatches; ++i){
+            int l = sat1->val(primed_first_dimacs + nInputs + i);
+            if(l > 0)
+                ps->latches.push_back(l-(primed_first_dimacs-unprimed_first_dimacs));
+            else if(l < 0)
+                ps->latches.push_back(l+(primed_first_dimacs-unprimed_first_dimacs));
+        }
+
+        s->next = ps;
         cex_states.push_back(s);
+        cex_states.push_back(ps);
         delete sat1;
         return false;
-    }
+    }       
     delete sat1;
     new_frame();
     return true;
@@ -1322,14 +1429,22 @@ int PDR::check(){
     initialize();
 
     if(!check_BMC0()) {
+        std::lock_guard<std::mutex> lock(result_mutex);
         if(!no_output) cout << "Thread " << thread_index << " check BMC0 failed" << endl;
-        RESULT = 10;
+        if(RESULT == 0){
+            RESULT = 10;
+            show_witness();
+        }
         return 10;
     }
     if(!no_output) cout << "Thread " << thread_index << " check BMC0 successed" << endl;
     if(!check_BMC1()) {
+        std::lock_guard<std::mutex> lock(result_mutex);
         if(!no_output) cout << "Thread " << thread_index << " check BMC1 failed" << endl;
-        RESULT = 10;
+        if(RESULT == 0){
+            RESULT = 10;
+            show_witness();
+        }
         return 10;
     }
     if(!no_output) cout << "Thread " << thread_index << " check BMC1 successed" << endl;

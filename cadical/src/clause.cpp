@@ -353,7 +353,7 @@ void Internal::add_new_original_clause () {
     if (!size) {
       if (!unsat) {
         if (!original.size ()) VERBOSE (1, "found empty original clause");
-        else MSG ("found falsified original clause");
+        //else MSG ("found falsified original clause");
         unsat = true;
       }
     } else if (size == 1) {

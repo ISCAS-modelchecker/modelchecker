@@ -100,8 +100,6 @@ void BMC::encode_init_condition(SATSolver *s){
             s->add(a.o);  s->add(-a.i1); s->add(-a.i2); s->add(0);
         }
     }
-    int res = bmcSolver->solve();
-    cout << "check init result = " << res << endl;
 }
 
 // translate the aiger language to internal states
@@ -348,9 +346,9 @@ void BMC::unfold(){
 }
 
 void BMC::initialize(){
-    cout<<"c BMC constructed from aiger file [Finished] "<<endl; 
+    if(!no_output) cout<<"c BMC constructed from aiger file [Finished] "<<endl; 
     translate_to_dimacs();
-    cout << "start BMC initialize" <<endl;
+    if(!no_output) cout << "start BMC initialize" <<endl;
 
     //check init
     bmcSolver = new CaDiCaL();
@@ -370,7 +368,7 @@ void BMC::initialize(){
     bmc_frame_k = 0;
 
     //unfold init
-    cout << "start BMC unfold" <<endl;
+    if(!no_output) cout << "start BMC unfold" <<endl;
     // 加入 NULL 和 常量false  
     uaiger->nodes.push_back(Node(0, 0, 0, 0));  // uaiger->unfold_variables.push_back(Variable(0, string("NULL")));
     uaiger->nodes.push_back(Node(1, 0, 0, 0));  // uaiger->unfold_variables.push_back(Variable(1, string("False")));
@@ -378,7 +376,7 @@ void BMC::initialize(){
     values.resize(variables.size());
     values[1] = 1;                    // x1 = false                  
     for(int latch: init_state){
-        if(latch > 0) values[latch] = -1;
+        if(latch > 0) values[latch] = -1;  // values[latch] = -x1 = true
             else if(latch < 0) values[-latch] = 1;
     }
     for(int i=0; i<=nLatches-1; ++i){
@@ -391,30 +389,69 @@ void BMC::initialize(){
 
 //check all frames
 int BMC::check(){
+    initialize();
+    //if(check_init) return 10;
     int res;
     for(bmc_frame_k = 1; bmc_frame_k <= nframes; bmc_frame_k++){
         if(RESULT!=0) return RESULT; // bmc pursue pdr 1
         unfold();
         res = solve_one_frame();
         if (res == 10) {
-            uaiger->show_statistics();
-            cout << 1 << endl;
-            if(!no_output) cout << "Output was asserted in frame." << endl;
+            std::lock_guard<std::mutex> lock(result_mutex);
+            if(RESULT == 0){
+                RESULT = 10;
+                if(!no_output) uaiger->show_statistics();
+                if(!no_output) cout << "Output was asserted in frame." << endl;
+                cout << "1\n";
+                cout << "b0\n";
+                vector<char> a(nInputs + nLatches + 2, 'x');
+                for(int latch: init_state)
+                    a[abs(latch)] = (latch>0?'1':'0');
+                for(int i=0; i<nLatches; ++i){
+                    int latch_index = unprimed_first_dimacs + nInputs + i;
+                    if(a[latch_index] == 'x'){
+                        int assignment = bmcSolver->val(latch_index);
+                        if(assignment != 0)
+                            a[latch_index] = (assignment<0?'0':'1');
+                    }
+                    cout << a[latch_index];
+                }
+                cout << endl;
+                int inputCount = 0;
+                for(int i : uaiger->inputs){
+                    int assignment = bmcSolver->val(i);
+                    if(assignment != 0)
+                        cout << (assignment<0?'0':'1');
+                    else 
+                        cout << 'x';
+                    inputCount++;
+                    if(inputCount % nInputs == 0)  cout << '\n';
+                }
+                cout << ".\n";       
+            }
             return 10;
-        }   
+        } 
+        if(abs((uaiger->outputs).back()) > 99900000) break;
     } 
     // res = 0
-    uaiger->show_statistics();
-    cout << "No output asserted in frames." << endl; 
+    if(!no_output){
+        uaiger->show_statistics();
+        cout << "No output asserted in frames." << endl; 
+    }
     return 0;
 }
 
 // check one frame
 int BMC::solve_one_frame(){
-    int bad = (uaiger->outputs).back();
     set<int> lit_set;
+    int bad = (uaiger->outputs).back();
     lit_set.insert(abs(bad));
-    //for(int cst : constraints) lit_set.insert(abs(cst));
+    
+    int cons_count = (uaiger->constraints).size();
+    for(int i=cons_count - constraints.size(); i<cons_count; ++i){
+        lit_set.insert(abs(uaiger->constraints[i]));
+        bmcSolver->add(uaiger->constraints[i]); bmcSolver->add(0);
+    }
     
     for(int i = (uaiger->ands).size()-1; i>=0; i--){   
         And a = uaiger->ands[i];            
@@ -436,12 +473,13 @@ int BMC::solve_one_frame(){
     bmcSolver->assume(bad);
     int result = bmcSolver->solve();
     if(result == 20){
-        if(bmc_frame_k < 10 || bmc_frame_k % 20 == 0) cout << "frames = "<< bmc_frame_k <<", bad = " << bad << ", res = " << result << endl;
         bmcSolver->add(-bad); bmcSolver->add(0); 
+        if(no_output) return result;
+        if(bmc_frame_k < 10 || bmc_frame_k % 20 == 0) cout << "frames = "<< bmc_frame_k <<", bad = " << bad << ", res = " << result << endl;
     } 
     else if(result == 10){
+        if(no_output) return result;
         cout << "frames = "<< bmc_frame_k <<", bad = " << bad << ", res = " << result << endl;
-        RESULT = 10;     
     }
     else cout << "???" << result << endl;
     return result;

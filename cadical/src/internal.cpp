@@ -619,6 +619,7 @@ int Internal::already_solved () {
     if(max_var == 0 && res == 0)
       res = 10;
   }
+  // printf("the res is = %d", res);
   return res;
 }
 void Internal::report_solving (int res) {
