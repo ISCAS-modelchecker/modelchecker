@@ -12,7 +12,7 @@
 using namespace std;
 using namespace std::chrono;
 
-int thread_count = 0, bmc_thread = 0, bmc_thread_count = 0;
+int thread_count = 0, bmc_thread = 0, bmc_thread_count = 0, pdr_thread = 0;
 bool sc = 0, acc = 0;
 
 void *thread_start_bmc(void *aiger){
@@ -50,38 +50,34 @@ int main(int argc, char **argv){
             i++;
             assert(i < argc-1);
             bmc_thread = (unsigned) atoi(argv[i]);
-            if(bmc_thread < 0 || bmc_thread > 12) bmc_thread = 0;
+            if(bmc_thread > 12) bmc_thread = 12;
+        }
+        else if (string(argv[i]) == "-pdr"){
+            i++;
+            assert(i < argc-1);
+            pdr_thread = (unsigned) atoi(argv[i]);
+            if(pdr_thread > 4) pdr_thread = 4;
         }
         else 
             property_index = (unsigned) atoi(argv[i]);
     }
     //仅在执行单线程PDR时，允许命令行设置参数sc aac（PDR线程数仅能通过basic.hpp修改）
     //仅在命令行输入指令-bmc [int]时执行bmc 其中int为线程数量0-12
-    if(thread_pdr and thread_4 == 0 and bmc_thread == 0){
+    if(pdr_thread == 1 and bmc_thread == 0){
         PDR pdr(aiger, -1, acc, sc);
         int res_pdr = pdr.check();  
     }
     else{
-        pthread_t tpdr1, tpdr2, tpdr3, tpdr4, tbmc[128];
-        if(thread_pdr and !thread_4){ 
-            int ret = pthread_create (&tpdr1, NULL, thread_start_pdr, (void *)aiger); 
-        }
-        if(thread_4){ 
-            int ret2 = pthread_create (&tpdr2, NULL, thread_start_pdr, (void *)aiger); 
-            int ret3 = pthread_create (&tpdr3, NULL, thread_start_pdr, (void *)aiger); 
-            int ret4 = pthread_create (&tpdr4, NULL, thread_start_pdr, (void *)aiger); 
+        pthread_t tpdr[8], tbmc[16];
+        for(int t = 0; t < pdr_thread; t++){
+            int ret = pthread_create (&tpdr[t], NULL, thread_start_pdr, (void *)aiger); 
         }
         for(int t = 0; t < bmc_thread; t++){
             int ret5 = pthread_create (&tbmc[t], NULL, thread_start_bmc, (void *)aiger); 
         }
         
-        if(thread_pdr) 
-            pthread_join(tpdr1, NULL);
-        if(thread_4){
-            pthread_join(tpdr2, NULL);
-            pthread_join(tpdr3, NULL);
-            pthread_join(tpdr4, NULL);
-        }
+        for(int t = 0; t < pdr_thread; t++)
+            pthread_join(tpdr[t], NULL);
         for(int t = 0; t < bmc_thread; t++)
             pthread_join(tbmc[t], NULL);
     }

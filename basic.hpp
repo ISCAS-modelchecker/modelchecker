@@ -2,7 +2,7 @@
 
 #define aig_veb 0
 
-#define no_output 0
+#define no_output 1
 #define print_witness 1
 #define print_certifacate 1
 #define output_stats_for_recblock 0

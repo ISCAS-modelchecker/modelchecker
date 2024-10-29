@@ -479,10 +479,10 @@ int BMC::solve_one_frame(){
         bmcSolver->add(-bad); bmcSolver->add(0); 
         return 20;
     }
-    if(bmc_frame_k<200) {
-        cout << "frames = "<< bmc_frame_k <<", bad = " << "skip" << ", res = " << 20 << endl;
-        return 20;
-    }
+    // if(bmc_frame_k<200) {
+    //     cout << "frames = "<< bmc_frame_k <<", bad = " << "skip" << ", res = " << 20 << endl;
+    //     return 20;
+    // }
     //从1000步开始检测
     // if(bmc_frame_k < 800){
     //     bmcSolver->add(-bad); bmcSolver->add(0); 
