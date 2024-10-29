@@ -1,9 +1,8 @@
 #pragma once
 
 #define aig_veb 0
-#define bmc_mixed_pdr 0
 
-#define no_output 1
+#define no_output 0
 #define print_witness 1
 #define print_certifacate 1
 #define output_stats_for_recblock 0
@@ -15,21 +14,22 @@
 #define output_stats_for_ctg 0
 #define output_stats_for_others 0
 #define output_stats_for_conclusion 0
+
 #define use_heuristic 1
-#define use_earliest_strengthened_frame 1
+#define use_earliest_strengthened_frame 1 
 #define use_punishment 1
-#define split_ands 0
-#define assumption_allsort 0
+#define split_ands 0         //0 better
+#define assumption_allsort 0 //0 better
+#define restart 0            //Temporarily 0
+#define use_heuristic_igoodlemma 0
+#define refer_skip 0
 
 #define unfold_ands 0
 #define unfold_latches 0
 #define output_aigand 0
 
-#define use_heuristic_igoodlemma 1
-#define refer_skip 0
-#define thread_pdr 0 
-#define thread_4 0        //并行PDR的线程数 1表示4线程
-#define thread_bmc 1        //并行PDR的线程数 1表示8线程
+#define thread_pdr 1 
+#define thread_4 1        //并行PDR的线程数 1表示4线程
 #define share_memory 0     //判断线程间是否共享信息
 #define share_memory_test 0   //线程1-3结束后不记录验证结果 只记录线程0（信息共享线程）的最终结果
 

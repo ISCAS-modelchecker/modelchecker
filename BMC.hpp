@@ -141,7 +141,11 @@ public:
     // Parameters & statistics
     std::chrono::_V2::steady_clock::time_point start_time;
 
-    BMC(Aiger *aiger, int property_index, int nframes): aiger(aiger), property_index(property_index), nframes(nframes){
+    // Parallel
+    int thread_index;
+    int max_thread_index;
+
+    BMC(Aiger *aiger, int property_index, int nframes, int Thread_index, int max): aiger(aiger), property_index(property_index), nframes(nframes), thread_index(Thread_index), max_thread_index(max){
         start_time = std::chrono::steady_clock::now();  
         allbad.clear();
         check_init = 0;
@@ -174,4 +178,8 @@ public:
     void show_values();
     void show_lit(int l) const;
     void show_litvec(vector<int> &lv) const;
+
+    static int terminate_callback(void * state) {
+        return (RESULT != 0);  // 返回全局变量 result 的值
+    }
 };

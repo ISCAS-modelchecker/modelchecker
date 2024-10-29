@@ -436,6 +436,63 @@ void PDR::translate_to_dimacs(){
         show_variables();
 }
 
+void PDR::show_uaiger(){
+    // std::ofstream file("certificate.aag");
+    // if (!file.is_open()) {
+    //     std::cerr << "Error: Could not open file " << "certificate.aag" << " for writing." << std::endl;
+    //     return;
+    // }    
+    // 输出AAG格式的头部
+    cout << "aag " << (nInputs*2 + nLatches + nAnds*2+nLatches) << " " << nInputs*2+nLatches << " " << 0 << " 1 " << nAnds*2+nLatches;
+    if(constraints.size()>0){
+        cout << " " << constraints.size();
+    }
+    cout << std::endl;
+    // 输出输入变量
+    for(int i = 1; i <= nInputs; ++i) {
+        cout << 2 * i << std::endl;
+    }
+    // 输出寄存器（latches）
+    for(int i = 1; i <= nLatches; ++i) {
+        cout << 2 * (nInputs + i) << endl;
+    }
+    // prime input
+    for(int i = 1; i <= nInputs; ++i) {
+        cout << 2 * (nInputs + nLatches + i) << std::endl;
+    }
+    // 输出 bad 信号
+    int badindex = dimacs_to_aiger(bad);
+    if(badindex <= 2 * nInputs + 1) badindex+=2*(nInputs + nLatches);
+    else badindex+=2*(nInputs + nLatches + nAnds);
+    cout << badindex << std::endl;
+    // // 输出约束
+    // for(int i = 0; i < constraints.size(); ++i) {
+    //     file << dimacs_to_aiger(constraints[i]) << std::endl;
+    // }
+    // 输出 AND 门
+    for(int i = 0; i < ands.size(); ++i) {
+        int o = dimacs_to_aiger(ands[i].o), i1 = dimacs_to_aiger(ands[i].i1), i2 = dimacs_to_aiger(ands[i].i2);
+        cout << o + 2*nInputs << " ";
+        cout << i1 + (i1>=2*(nInputs + nLatches + 1) ? 2*nInputs : 0) << " ";
+        cout << i2 + (i2>=2*(nInputs + nLatches + 1) ? 2*nInputs : 0) << std::endl;
+    }
+    for(int i = 1; i <= nLatches; ++i){
+        int next = dimacs_to_aiger(nexts[i-1]);
+        if(next == 0) //有bug 0 1 单独处理
+            cout << 2 * (nInputs + i + nInputs + nLatches + nAnds) << " " << 1 << " " << 0 << endl;
+        else
+            cout << 2 * (nInputs + i + nInputs + nLatches + nAnds) << " " << next + (next>=2*(nInputs + nLatches + 1) ? 2*nInputs : 0) << " " << next + (next>=2*(nInputs + nLatches + 1) ? 2*nInputs : 0) << endl;
+    }
+    for(int i = 0; i < ands.size(); ++i) {
+        int o = dimacs_to_aiger(ands[i].o), i1 = dimacs_to_aiger(ands[i].i1), i2 = dimacs_to_aiger(ands[i].i2);
+        cout << o + 2*(nInputs + nLatches + nAnds) << " ";
+        cout << i1 + (i1<=2*nInputs+1 ? 2*(nInputs + nLatches) : 2*(nInputs + nLatches + nAnds)) << " ";
+        cout << i2 + (i2<=2*nInputs+1 ? 2*(nInputs + nLatches) : 2*(nInputs + nLatches + nAnds)) << std::endl;
+    }    
+    // // 关闭文件
+    // file.close(); 
+}
+
 void PDR::initialize_heuristic(){
     heuristic_lit_cmp = new heuristic_Lit_CMP();
     heuristic_lit_cmp->counts.clear();
@@ -453,6 +510,12 @@ void PDR::initialize_heuristic(){
     //     heuristic_lit_cmp->counts[i] = 0.5;
     // }
 }
+void PDR::restart_heuristic(){
+    for(int i = nInputs+2; i <= nInputs+nLatches+1; i++){
+        if(heuristic_lit_cmp->counts[i] >0.5)
+        heuristic_lit_cmp->counts[i] = 1.0/heuristic_lit_cmp->counts[i];
+    }    
+}
 
 void PDR::updateLitOrder(Cube &cube, int level){
     //decay
@@ -461,7 +524,10 @@ void PDR::updateLitOrder(Cube &cube, int level){
     }
     //update heuristic score of literals remove abs
     for(int index: cube){
-        heuristic_lit_cmp->counts[abs(index)] += 10.0/cube.size();
+        if(use_plusone_count)
+            heuristic_lit_cmp->counts[abs(index)] += 1;
+        else
+            heuristic_lit_cmp->counts[abs(index)] += 10.0/cube.size();
     }
     //check
     if(output_stats_for_heuristic){
@@ -477,6 +543,7 @@ void PDR::initialize(){
     simplify_aiger();
     translate_to_dimacs();
     initialize_heuristic();
+    //show_uaiger();
 
     nQuery = nCTI = nCTG = nmic = nCoreReduced = nAbortJoin = nAbortMic = 0;
     if(!no_output) cout<<"c PDR constructed from aiger file [Finished] \n";
@@ -936,24 +1003,24 @@ void PDR::extract_state_from_sat(SATSolver *sat, State *s, State *succ){
         cout << endl;
     }
 
-    // int last_index = 0, corelen = 0;
-    // if(true){
-    //     int core_literal = 0;
-    //     for(int i=0; i<assumptions.size(); i++){
-    //         int l = assumptions[i];
-    //         if(abs(l) >= nInputs+2 and abs(l) <= nInputs+nLatches+1) corelen++;
-    //         if(lift->failed(l)){
-    //             double score = (i-core_literal)/20.0;
-    //             if(score > 1.0) score = 1.05;
-    //             if(abs(l) < primed_first_dimacs)
-    //                 heuristic_lit_cmp->counts[abs(l)] += score; //score
-    //             else
-    //                 heuristic_lit_cmp->counts[abs(l)-distance] += score;
-    //             core_literal = i;
-    //             last_index = corelen;
-    //         }
-    //     }
-    // }
+    int last_index = 0, corelen = 0;
+    if(use_acc){
+        int core_literal = 0;
+        for(int i=0; i<assumptions.size(); i++){
+            int l = assumptions[i];
+            if(abs(l) >= nInputs+2 and abs(l) <= nInputs+nLatches+1) corelen++;
+            if(lift->failed(l)){
+                double score = (i-core_literal)/20.0;
+                if(score > 1.0) score = 1.05;
+                if(abs(l) < primed_first_dimacs)
+                    heuristic_lit_cmp->counts[abs(l)] += score; //score
+                else
+                    heuristic_lit_cmp->counts[abs(l)-distance] += score;
+                core_literal = i;
+                last_index = corelen;
+            }
+        }
+    }
 
     for(int l : latches){
         if(lift->failed(l)){
@@ -1130,6 +1197,7 @@ bool PDR::propagate(){
         if (output_stats_for_propagate)
             cout << "frame="<<i << " ckeep=" << ckeep << " cprop=" << cprop  << endl;
         if(frames[i].cubes.size() == 0){
+            std::lock_guard<std::mutex> lock(result_mutex);
             if(RESULT != 0) return true;
             RESULT = 20;
             int invariant;
@@ -1458,6 +1526,22 @@ int PDR::check(){
     int ct = 0;
     while(true){
         if(RESULT!=0) return RESULT;
+        if(restart and depth() > restart_depth){
+            for(auto f : frames){
+                if(f.solver != nullptr)
+                    delete f.solver;
+            }
+            frames.clear();  
+            assert(frames.size() == 0); 
+            new_frame();
+            encode_init_condition(frames[0].solver);
+            new_frame();
+            new_frame();
+            assert(depth() == 1);
+            top_frame_cannot_reach_bad = true;
+            earliest_strengthened_frame = depth();
+            restart_heuristic();
+        }
         if(share_memory and main_thread_index >= 0){
             while(!cube_register[main_thread_index][depth()].empty()){
                 if(RESULT!=0) return RESULT;
@@ -1511,6 +1595,7 @@ int PDR::check(){
             top_frame_cannot_reach_bad = false;
             if(!rec_block_cube()){
                 // find counter-example
+                std::lock_guard<std::mutex> lock(result_mutex);
                 result = 10;
                 if(RESULT==0) {
                     RESULT = 10;

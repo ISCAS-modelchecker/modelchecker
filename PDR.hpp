@@ -101,8 +101,8 @@ public:
         if (frame_k > b.frame_k) return false;
         if (depth > b.depth) return true;           // prefer shallower (heuristic)
         if (depth < b.depth) return false;
-        return (((state->index)%thread_index) < (((b.state)->index)%thread_index));
-        //return ((state->index) < ((b.state)->index));
+        //return (((state->index)%thread_index) < (((b.state)->index)%thread_index));
+        return ((state->index) < ((b.state)->index));
         //return ((state) < ((b.state)));
     }
 };
@@ -262,6 +262,7 @@ public:
 class PDR
 {
     Aiger *aiger;
+    Aiger *uaiger;
     
     // the interal data structure for Aiger (in CNF dimacs format).
     int nInputs, nLatches, nAnds;
@@ -288,6 +289,10 @@ class PDR
     // minisatCore *init = nullptr;
     int notInvConstraints;
     bool satelite_unsat;
+    int restart_depth = 5;
+    bool use_sc;
+    bool use_acc;
+    bool use_plusone_count = 1; 
 
     State *cex_state_idx = nullptr;
     bool find_cex = false;
@@ -314,14 +319,20 @@ public:
     // for incremental check
     bool first_incremental_check;
 
-    PDR(Aiger *aiger, int Thread_index): aiger(aiger), thread_index(Thread_index){
+    PDR(Aiger *aiger, int Thread_index, bool acc, bool sc): aiger(aiger), thread_index(Thread_index), use_acc(acc), use_sc(sc){
         start_time = std::chrono::steady_clock::now();
         first_incremental_check = 1;
         property_index = 0;
-        if(Thread_index == 1)   main_thread_index = 0;
-            else if(Thread_index == 4)   main_thread_index = 1;
-            else main_thread_index = -1;
         satelite_unsat = 0;
+        if(Thread_index >= 0){
+            if(Thread_index == 1)   main_thread_index = 0;
+                else if(Thread_index == 4)   main_thread_index = 1;
+                else main_thread_index = -1;
+            if(Thread_index % 2 == 0) use_acc = 1;
+                else use_acc = 0;
+            if(Thread_index >= 2) use_plusone_count = 1;
+                else use_plusone_count = 0;
+        }
     }
     ~PDR(){
         if(satelite != nullptr) delete satelite;
@@ -333,6 +344,7 @@ public:
     void simplify_aiger();
     void initialize(); 
     void translate_to_dimacs();
+    void show_uaiger();
 
     // auxiliary functions
     int prime_var(int var);
@@ -344,7 +356,6 @@ public:
     bool is_inductive(SATSolver *solver, const Cube &cube, bool gen_core = false, bool reverse_assumption = true);
     void new_frame();
     bool rec_block_cube();
-    bool rec_block_cube2();
     bool propagate();    
     bool get_pre_of_bad(State *s);
     void extract_state_from_sat(SATSolver *sat, State *s, State *succ);
@@ -354,8 +365,6 @@ public:
     bool check_BMC0();
     bool check_BMC1();
     int check();
-    int incremental_check();
-    int incremental_check2();
 
     void encode_init_condition(SATSolver *s);   // I
     void encode_bad_state(SATSolver *s);        // Bad cone, used for test SAT?[I/\-B]
@@ -387,6 +396,7 @@ public:
 
     //heuristic function
     void initialize_heuristic();
+    void restart_heuristic();
     void updateLitOrder(Cube &cube, int level);
 };
 

@@ -24,11 +24,12 @@ public:
 };
 
 class CaDiCaL: public SATSolver{
+public:
     void * s;
     vector<int > cls;
     int nv;
     bool clear_flag;
-public:
+
     CaDiCaL(){
         s = ipasir_init();
         nv = 0;

@@ -363,6 +363,7 @@ void BMC::initialize(){
 
     //for solve
     bmcSolver = new CaDiCaL();
+    ipasir_set_terminate(bmcSolver->s, nullptr, terminate_callback);
     bmcSolver->add(-1); bmcSolver->add(0); 
     lit_has_insert.resize(99999999);       //lit_has_insert.resize((uaiger->ands).size()+2); 
     bmc_frame_k = 0;
@@ -380,11 +381,14 @@ void BMC::initialize(){
             else if(latch < 0) values[-latch] = 1;
     }
     for(int i=0; i<=nLatches-1; ++i){
+        uaiger->nodes.push_back(Node(2, 0, 0, 0)); //uaiger->unfold_variables.push_back(Variable((uaiger->vsize()), 'l', 0, false));
         if(values[i+nInputs+2] == 0){
-            uaiger->nodes.push_back(Node(2, 0, 0, 0)); //uaiger->unfold_variables.push_back(Variable((uaiger->vsize()), 'l', 0, false));
-            values[i+nInputs+2] = uaiger->nsize()-1;            
+            //uaiger->nodes.push_back(Node(2, 0, 0, 0)); //uaiger->unfold_variables.push_back(Variable((uaiger->vsize()), 'l', 0, false));
+            values[i+nInputs+2] = uaiger->nsize()-1;    
+            //cout << values[i+nInputs+2] << " "  ;       
         } 
     }
+    //cout << endl;
 }
 
 //check all frames
@@ -393,7 +397,7 @@ int BMC::check(){
     //if(check_init) return 10;
     int res;
     for(bmc_frame_k = 1; bmc_frame_k <= nframes; bmc_frame_k++){
-        if(RESULT!=0) return RESULT; // bmc pursue pdr 1
+        if(RESULT!=0) return 0; 
         unfold();
         res = solve_one_frame();
         if (res == 10) {
@@ -409,11 +413,13 @@ int BMC::check(){
                     a[abs(latch)] = (latch>0?'1':'0');
                 for(int i=0; i<nLatches; ++i){
                     int latch_index = unprimed_first_dimacs + nInputs + i;
+                    //cout << latch_index << " ";
                     if(a[latch_index] == 'x'){
-                        int assignment = bmcSolver->val(latch_index);
+                        int assignment = bmcSolver->val(unprimed_first_dimacs + i);
                         if(assignment != 0)
                             a[latch_index] = (assignment<0?'0':'1');
                     }
+                    //cout << a[latch_index] << " ";
                     cout << a[latch_index];
                 }
                 cout << endl;
@@ -431,9 +437,8 @@ int BMC::check(){
             }
             return 10;
         } 
-        if(abs((uaiger->outputs).back()) > 99900000) break;
+        if(res == 0 || abs((uaiger->outputs).back()) > 99900000) break;
     } 
-    // res = 0
     if(!no_output){
         uaiger->show_statistics();
         cout << "No output asserted in frames." << endl; 
@@ -470,17 +475,36 @@ int BMC::solve_one_frame(){
         bmcSolver->add(a.o);  bmcSolver->add(-a.i1); bmcSolver->add(-a.i2); bmcSolver->add(0);
     }
 
+    if(bmc_frame_k % max_thread_index != (thread_index-1)) {
+        bmcSolver->add(-bad); bmcSolver->add(0); 
+        return 20;
+    }
+    if(bmc_frame_k<200) {
+        cout << "frames = "<< bmc_frame_k <<", bad = " << "skip" << ", res = " << 20 << endl;
+        return 20;
+    }
+    //从1000步开始检测
+    // if(bmc_frame_k < 800){
+    //     bmcSolver->add(-bad); bmcSolver->add(0); 
+    //     if(bmc_frame_k < 10 || bmc_frame_k % 20 == 0) cout << "frames = "<< bmc_frame_k <<", bad = " << "skip" << ", res = " << 20 << endl;
+    //     return 20;
+    // }
+
     bmcSolver->assume(bad);
     int result = bmcSolver->solve();
     if(result == 20){
         bmcSolver->add(-bad); bmcSolver->add(0); 
-        if(no_output) return result;
+        if(no_output) return 20;
         if(bmc_frame_k < 10 || bmc_frame_k % 20 == 0) cout << "frames = "<< bmc_frame_k <<", bad = " << bad << ", res = " << result << endl;
+        return 20;
     } 
     else if(result == 10){
-        if(no_output) return result;
+        if(no_output) return 10;
         cout << "frames = "<< bmc_frame_k <<", bad = " << bad << ", res = " << result << endl;
+        return 10;
     }
-    else cout << "???" << result << endl;
-    return result;
+    else{
+        if(!no_output) cout << "bmcsolver terminate\n";
+        return 0;
+    }
 }
