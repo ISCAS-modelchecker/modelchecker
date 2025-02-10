@@ -1,43 +1,32 @@
 #include "aig.hpp"
-#include <fstream>
-#include <assert.h>
-#include <cmath>
-#include "basic.hpp"
-#include <iostream>
-#include <cstring>
-#include <algorithm>
 
-Aiger_and::Aiger_and(unsigned o, unsigned i1, unsigned i2):
-    o(o),
-    i1(i1),
-    i2(i2)
-{
-}
-
-Aiger_latches::Aiger_latches(unsigned l, unsigned next, unsigned default_val = 0):
-    l(l),
-    next(next),
-    default_val(default_val)
-{
-}
+std::mutex result_mutex;  
+unsigned long long state_count = 0;
+int RESULT = 0; // 0 means safe in PORTFOLIO; 10 finds a bug; 20 proves safety
 
 Aiger::Aiger(){
-    max_var = 0;
-    num_inputs = 0;
-    num_outputs = 0;
-    num_bads = 0;
-    num_ands = 0;
-    num_constraints = 0;
-    num_latches = 0;
-    binaryMode = 0;
+    max_var = num_inputs = num_outputs = num_bads = num_ands = num_constraints = num_latches = binaryMode = 0;
 
-    ands.clear();
-    latches.clear();
-    inputs.clear();
-    outputs.clear();
-    bads.clear();
-    constraints.clear();
+    Aiger_ands.clear();
+    Aiger_latches.clear();
+    Aiger_inputs.clear();
+    Aiger_outputs.clear();
+    Aiger_bads.clear();
+    Aiger_constraints.clear();
     symbols.clear();
+
+    //for MCbase
+    variables.clear();
+    ands.clear();
+    nexts.clear();
+    init_state.clear();
+    constraints.clear();
+    constraints_prime.clear();
+    allbad.clear();
+
+    //for ic3base
+    map_to_prime.clear();
+    map_to_unprime.clear();
 }
 
 int read_literal(unsigned char **fbuf){
@@ -122,11 +111,11 @@ Aiger* load_aiger_from_file(string str){
 
     if(binary_mode){
         for(int i=1; i<=aiger->num_inputs; ++i)
-            aiger->inputs.push_back(2*i);
+            aiger->Aiger_inputs.push_back(2*i);
     }else{
         for(int i=0; i<aiger->num_inputs; ++i){
             read_literal(&fbuf); fbuf++;
-            aiger->inputs.push_back(read_literal(&fbuf));
+            aiger->Aiger_inputs.push_back(read_literal(&fbuf));
         }
     }
 
@@ -141,30 +130,30 @@ Aiger* load_aiger_from_file(string str){
         n = read_literal(&fbuf);
         d = max(read_literal(&fbuf), 0);
         // 0: reset; 1: set;  d=l: uninitialized
-        aiger->latches.push_back(Aiger_latches(l, n, d));
+        aiger->Aiger_latches.push_back(Aiger_latch(l, n, d));
         if(aig_veb == 2)
             printf("c read latches %d <- %d (default %d)\n", l, n, d);
     }
 
     for(int i=0; i<aiger->num_outputs; ++i){
         read_literal(&fbuf); fbuf++;
-        aiger->outputs.push_back(read_literal(&fbuf));
+        aiger->Aiger_outputs.push_back(read_literal(&fbuf));
         if(aig_veb == 2)
-            printf("c read outputs %d\n", aiger->outputs[i]);
+            printf("c read outputs %d\n", aiger->Aiger_outputs[i]);
     }
 
     for(int i=0; i<aiger->num_bads; ++i){
         read_literal(&fbuf); fbuf++;
-        aiger->bads.push_back(read_literal(&fbuf));
+        aiger->Aiger_bads.push_back(read_literal(&fbuf));
         if(aig_veb == 2)
-            printf("c read bads %d\n", aiger->bads[i]);
+            printf("c read bads %d\n", aiger->Aiger_bads[i]);
     }
 
     for(int i=0; i<aiger->num_constraints; ++i){
         read_literal(&fbuf); fbuf++;
-        (aiger->constraints).push_back(read_literal(&fbuf));
+        (aiger->Aiger_constraints).push_back(read_literal(&fbuf));
         if(aig_veb == 2)
-            printf("c read constraint %d\n", aiger->constraints[i]);
+            printf("c read constraint %d\n", aiger->Aiger_constraints[i]);
     }
     
     // TODO: finish justice and fairness
@@ -178,7 +167,7 @@ Aiger* load_aiger_from_file(string str){
             i1 = o  - d1;
             d2 = decode(&fbuf);
             i2 = i1 - d2;
-            aiger->ands.push_back(Aiger_and(o, i1, i2));
+            aiger->Aiger_ands.push_back(Aiger_and(o, i1, i2));
             if(aig_veb == 2)
                 printf("c read and %d <- %d, %d\n", o, i1, i2);
         }
@@ -190,7 +179,7 @@ Aiger* load_aiger_from_file(string str){
             o = read_literal(&fbuf);
             i1 = read_literal(&fbuf);
             i2 = read_literal(&fbuf);
-            aiger->ands.push_back(Aiger_and(o, i1, i2));
+            aiger->Aiger_ands.push_back(Aiger_and(o, i1, i2));
             if(aig_veb == 2)
                 printf("c read and %d <- %d, %d\n", o, i1, i2);
         }
@@ -267,5 +256,11 @@ Aiger* load_aiger_from_file(string str){
             , aiger->num_justice
             , aiger->num_fairness);
     }
+
+    //translate to dimacs
+    aiger->variables.push_back(Variable(0, string("NULL")));
+    aiger->variables.push_back(Variable(1, string("False")));
+
+
     return aiger;
 }

@@ -1,17 +1,13 @@
 clear;
 clear;
 #./rebuild.sh;
-# cd /home/zhulf/portfolioMC
-# cd /home/zhulf/project/Modelchecker-HWMCC24
 make clean;
 make -j;
 
 #sat
-./modelchecker  /home/zhulf/data/testcase/test4_fold.aag
-./modelchecker  -bmc 12 /home/zhulf/data/testcase/bug_instance/prodcellp0neg.aag
-#./modelchecker /home/zhulf/modelchecker/test4_2b.aag
-#./modelchecker /home/zhulf/data/HWMCC24/trace.aag
-#./modelchecker /home/zhulf/modelchecker/test4.aag
+#./modelchecker  -bmc 1 /home/zhulf/data/testcase/test4_fold.aag
+#./modelchecker  /home/zhulf/data/testcase/test4_fold.aag
+./modelchecker  -pdr 1 -bmc 1 /home/zhulf/data/testcase/bug_instance/prodcellp0neg.aag
 
 
 #unsat

@@ -28,18 +28,17 @@ namespace Minisat {
 //=================================================================================================
 // Default hash/equals functions
 //
-
 static inline uint32_t hash(uint32_t x){ return x; }
 static inline uint32_t hash(uint64_t x){ return (uint32_t)x; }
 static inline uint32_t hash(int32_t x) { return (uint32_t)x; }
 static inline uint32_t hash(int64_t x) { return (uint32_t)x; }
-
-
 template<class K> struct Hash  { uint32_t operator()(const K& k)               const { return hash(k);  } };
 template<class K> struct Equal { bool     operator()(const K& k1, const K& k2) const { return k1 == k2; } };
 
 template<class K> struct DeepHash  { uint32_t operator()(const K* k)               const { return hash(*k);  } };
 template<class K> struct DeepEqual { bool     operator()(const K* k1, const K* k2) const { return *k1 == *k2; } };
+
+
 
 
 //=================================================================================================
@@ -73,8 +72,7 @@ class Map {
     bool    checkCap(int new_size) const { return new_size > cap; }
 
     int32_t index  (const K& k) const { return hash(k) % cap; }
-    void   _insert (const K& k, const D& d) {
-        // printf("insert %d\n", k); 
+    void   _insert (const K& k, const D& d) { 
         vec<Pair>& ps = table[index(k)];
         ps.push(); ps.last().key = k; ps.last().data = d; }
 
@@ -154,7 +152,6 @@ class Map {
 
     // PRECONDITION: the key must exist in the map.
     void remove(const K& k) {
-        // printf("remove %d\n",k);
         assert(table != NULL);
         vec<Pair>& ps = table[index(k)];
         int j = 0;

@@ -1,53 +1,12 @@
 #pragma once
 
-#include <fstream>
-#include <vector>
-#include <iostream>
 #include <chrono>
-#include <map>
+#include <algorithm>
 #include <set>
-#include <string>
 #include "aig.hpp"
-#include "basic.hpp"
 #include "sat_solver.hpp"
-#include <atomic>
-#include <mutex>
+//#include <atomic>
 using namespace std;
-
-#ifndef TIMESTAMP
-#define TIMESTAMP
-    extern unsigned long long state_count;
-    extern int RESULT; // 0 means safe in PORTFOLIO; 10 means find a bug; 20 proves safety
-    extern std::mutex result_mutex;  // 定义一个互斥锁
-#endif
-
-// save information for debug
-class Variable{ 
-public:
-    int dimacs_var; // the index in variables set;
-    string name;    // the name of this variable
-    Variable(int dimacs_index, string name){
-        this->dimacs_var = dimacs_index;
-        this->name = name;
-    }
-    Variable(int dimacs_index, char type, int type_index, bool prime){
-        this->dimacs_var = dimacs_index;
-        assert(type=='i' || type=='o' || type=='l' || type == 'a');
-        stringstream ss;
-        ss << type;
-        ss << type_index;
-        if(prime)
-            ss << "'";
-        ss >> name;
-}
-};
-
-class And{
-public:
-    int o, i1, i2;
-    And(int o, int i1, int i2):o(o),i1(i1),i2(i2){}
-};
-
 
 // Cone: constraints, bad, latches
 // Real_Init: latches_default /\ constraints
@@ -99,11 +58,9 @@ public:
     bool operator<(const Obligation &b) const{
         if (frame_k < b.frame_k) return true;       // prefer lower levels (required)
         if (frame_k > b.frame_k) return false;
-        if (depth > b.depth) return true;           // prefer shallower (heuristic)
-        if (depth < b.depth) return false;
-        //return (((state->index)%thread_index) < (((b.state)->index)%thread_index));
+        if (depth < b.depth) return true;           // prefer deeper (heuristic)
+        if (depth > b.depth) return false;
         return ((state->index) < ((b.state)->index));
-        //return ((state) < ((b.state)));
     }
 };
 
@@ -166,87 +123,6 @@ public:
     }
 };
 
-template<class T>
-class LockFreeQueue
-{
-    struct Node
-    {
-        T _value;
-        atomic<Node*> _next;
-        Node(const T& v)
-            :_value(v)
-            ,_next(nullptr)
-        {}
-    };
-    public:
-    LockFreeQueue(){_head = _tail = new Node(T());size=0;error=0;}
-
-    LockFreeQueue(const LockFreeQueue<T>&) = delete;
- 
-    ~LockFreeQueue(){
-        Node* cur = _head;
-        while(cur)
-        {
-            Node* next = cur->_next;
-            delete cur;
-            cur = next;
-        }
-    }
-
-    void Enqueue(const T& x){
-        Node* newnode = new Node(x);//要插入的新值
-        Node* oldtail = nullptr;//旧的尾节点
-        Node* nullnode = nullptr;//空节点
-        do
-        {
-            oldtail = _tail.load();//用load取出当前_tail节点的值
-        } 
-        //如果当前tail节点的下一个节点是空，也就是等于参数一，那么修改为参数二
-        while (oldtail->_next.compare_exchange_weak(nullnode, newnode) != true);
-        //由于现在的真正的尾节点是newnode，所以将_tail节点更新为newnode
-        _tail.compare_exchange_weak(oldtail, newnode);
-        size++;
-    }
-
-    T DeQueue(){
-        Node* oldhead = _head.load();//取出当前的头节点，也就是哑节点
-        T ret;
-        do
-        {
-            Node* next = oldhead->_next;//取出头节点的下一个节点，此节点中有我们想要的值
-            if(next == nullptr)
-            {
-                if(size>0) error=1;
-                return T();
-            }
-            else
-            {
-                ret = next->_value;//取走值
-            }
-        }
-        //将头节点(哑节点)修改为下一个节点
-        while(_head.compare_exchange_weak(oldhead,oldhead->_next) != true);	
-        delete oldhead;
-        size--;
-        return ret;
-    }
-
-    bool Empty() {
-        return _head.load() == _tail.load();
-    }
-
-    int Size() {return size;}
-
-    bool Error() {return error;}
-
-private:
-    atomic<Node*> _head;
-    atomic<Node*> _tail;
-    int size;
-    bool error;
-};
-
-
 class Frame{
 public:
     set<Cube, Cube_CMP> cubes;
@@ -259,25 +135,19 @@ public:
 };
 
 
-class PDR
+class PDR : public Aiger
 {
-    Aiger *aiger;
     Aiger *uaiger;
     
     // the interal data structure for Aiger (in CNF dimacs format).
-    int nInputs, nLatches, nAnds;
-    vector<Variable> variables;
-    vector<And> ands;
-    vector<int> nexts;
-    vector<int> constraints, constraints_prime;
-    vector<int> init_state; set<int> set_init_state;
-    int bad, bad_prime;
-    const int unprimed_first_dimacs = 2;
+    
+
+    
     int primed_first_dimacs;
     int property_index;
     int thread_index;
     int main_thread_index;
-    map<int, int> map_to_prime, map_to_unprime; // used for mapping ands
+    
     
     // for IC3
     minisatSimp *satelite = nullptr;
@@ -287,16 +157,18 @@ class PDR
     CaDiCaL *checker = nullptr;
     //minisatCore *lift = nullptr;
     // minisatCore *init = nullptr;
-    int notInvConstraints;
-    bool satelite_unsat;
-    int restart_depth = 5;
-    bool use_sc;
-    bool use_acc;
-    bool use_plusone_count = 1; 
+    int notInvConstraints, restart_depth;
+    bool satelite_unsat, use_pr, use_sc, use_acc, use_plusone_count;
 
     State *cex_state_idx = nullptr;
     bool find_cex = false;
     vector<State *> states, cex_states;
+
+    int nPush, nUnpush, nCore, nCorelen, nCube, nCubelen, nProp, nkCore, nkobl, nobl;
+
+    static bool abs_compare(int a, int b) {
+        return abs(a) < std::abs(b);
+    }
 
 public:
     // Frame & Cubes
@@ -319,19 +191,17 @@ public:
     // for incremental check
     bool first_incremental_check;
 
-    PDR(Aiger *aiger, int Thread_index, bool acc, bool sc): aiger(aiger), thread_index(Thread_index), use_acc(acc), use_sc(sc){
+    PDR(Aiger *aiger, int Thread_index, bool acc, bool pr, bool sc, bool ao): Aiger(*aiger), thread_index(Thread_index), use_acc(acc), use_pr(pr), use_sc(sc), use_plusone_count(ao){
         start_time = std::chrono::steady_clock::now();
+        nPush = nUnpush = nCore = nCorelen = nCube = nCubelen = nProp = nkCore = nkobl = nobl = 0;
         first_incremental_check = 1;
         property_index = 0;
         satelite_unsat = 0;
+        restart_depth = 5;
         if(Thread_index >= 0){
             if(Thread_index == 1)   main_thread_index = 0;
                 else if(Thread_index == 4)   main_thread_index = 1;
                 else main_thread_index = -1;
-            if(Thread_index % 2 == 0) use_acc = 1;
-                else use_acc = 0;
-            if(Thread_index >= 2) use_plusone_count = 1;
-                else use_plusone_count = 0;
         }
     }
     ~PDR(){
@@ -358,7 +228,7 @@ public:
     bool rec_block_cube();
     bool propagate();    
     bool get_pre_of_bad(State *s);
-    void extract_state_from_sat(SATSolver *sat, State *s, State *succ);
+    void extract_state_from_sat(SATSolver *sat, State *s, State *succ, int findex);
     void mic(Cube &cube, int k, int depth);
     bool CTG_down(Cube &cube, int k, int depth, set<int> &required);
     void generalize(Cube &cube, int level);
@@ -372,7 +242,7 @@ public:
     void encode_lift(SATSolver *s);
 
     void clear_po();
-    void add_cube(Cube &cube, int k, bool to_all=true, bool ispropagate = false, int isigoodlemma = 0);
+    void add_cube(Cube &cube, int k, bool to_all=true, bool ispropagate = false, int prtimes = 0);
     int  depth(){return frames.size() - 2;}
     bool cube_is_null(Cube &c){return c.size() == 0;}
     bool state_is_null(State *s){return s->latches.size() == 0;}
@@ -380,7 +250,6 @@ public:
 
     // log
     void show_aag();
-    void show_aig();
     void show_state(State *s);
     string return_state(State *s);
     string return_input(State *s);

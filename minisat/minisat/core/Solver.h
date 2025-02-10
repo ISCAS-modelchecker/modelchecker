@@ -151,6 +151,8 @@ public:
     uint64_t solves, starts, decisions, rnd_decisions, propagations, conflicts;
     uint64_t dec_vars, num_clauses, num_learnts, clauses_literals, learnts_literals, max_literals, tot_literals;
 
+    double get_activity(Var x) {return activity[x];} //size_t sz = (size_t)Minisat::toInt(Minisat::var(l));
+
 protected:
 
     // Helper structures:

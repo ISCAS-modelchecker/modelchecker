@@ -1,23 +1,17 @@
 #pragma once
 
-#include <fstream>
-#include <vector>
-#include <iostream>
 #include <chrono>
-#include <map>
+#include <algorithm>
 #include <set>
-#include <string>
 #include "aig.hpp"
-#include "basic.hpp"
 #include "sat_solver.hpp"
-#include "PDR.hpp"
 using namespace std;
 
 class Node{
 public:
     int type;            // 0:null 1:const 2:input 3:and
-    int fathers;         // 父节点个数
-    int child1, child2;  // 子节点
+    int fathers;         // father node count
+    int child1, child2;  // child node
     bool activate; 
 
     Node(){
@@ -30,16 +24,14 @@ class UnfoldAiger{
 public:
     vector<int> inputs, outputs, constraints, init;
     vector<And> ands;
-    vector<Variable> unfold_variables;
     vector<Node> nodes;
     
-    vector<vector<And>> hash_table; // hash_table[k] 存储与门<output, k, neighbor> (存储每个子节点的父亲)
+    vector<vector<And>> hash_table; // hash_table[k] stores AND gate <output, k, neighbor> (store father of each child node)
 
     UnfoldAiger(){
-        unfold_variables.clear(); ands.clear(); inputs.clear(); outputs.clear(); constraints.clear();
+        ands.clear(); inputs.clear(); outputs.clear(); constraints.clear();
     }
 
-    int vsize(){return unfold_variables.size();}
     int asize(){return ands.size();}
     int isize(){return inputs.size();}
     int osize(){return outputs.size();}
@@ -60,7 +52,6 @@ public:
         //show_ands();
         ands.clear();
         for(int i=0; i<oldsize; i++){
-            //cout << i << " " << nodes[i].child1 << nodes[i].child2 << endl;
             if(nodes[i].type == 3 and nodes[i].activate == 1){
                 ands.push_back(And(i, nodes[i].child1, nodes[i].child2));
             }
@@ -90,52 +81,28 @@ public:
         }
         cout << endl;
     }
-
-    void show_unfold_variable(){
-        cout << "-------------show_unfold_variables------------------" <<endl;
-        int ct = 1;
-        int sz = unfold_variables.size();
-        for(int i=0; i<sz; ++i){
-            Variable &v = unfold_variables[i];
-            cout << "unfold_variable[" << i << "]= v" << v.dimacs_var << "(" << v.name << ")    \t";
-            if(ct++ % 4 == 0 || (i+1<sz && unfold_variables[i+1].name[0] != v.name[0])){
-                cout << endl;
-                ct = 1;
-            }
-        }
-        cout << endl;
-    }
 };
 
-class BMC
+class BMC : public Aiger
 {
 public:
-    Aiger *aiger;
     UnfoldAiger *uaiger;
     
     // the interal data structure for Aiger (in CNF dimacs format).
-    int nInputs, nLatches, nAnds;
-    vector<Variable> variables;
-    vector<And> ands;
-    vector<int> nexts;
-    vector<int> constraints, constraints_prime;
-    vector<int> init_state; set<int> set_init_state;
-    vector<int> allbad;
-    int bad, bad_prime;
-    const int unprimed_first_dimacs = 2;
+    
     int primed_first_dimacs;
     int property_index;
-    map<int, int> map_to_prime, map_to_unprime; // used for mapping ands
     
     //for BMC unfold
     int nframes;
-    vector<int> values;   // real value of each node 与variables一一对应
+    vector<int> values;   // "real value of each node" corresponds to "variables"
     int tempvalue[999999];
     bool check_init;
 
     //for BMC solve
     CaDiCaL *bmcSolver = nullptr;
     int bmc_frame_k;
+    int max_index_of_ands_added_to_solver; 
     vector<bool> lit_has_insert; 
     
     // Parameters & statistics
@@ -145,10 +112,11 @@ public:
     int thread_index;
     int max_thread_index;
 
-    BMC(Aiger *aiger, int property_index, int nframes, int Thread_index, int max): aiger(aiger), property_index(property_index), nframes(nframes), thread_index(Thread_index), max_thread_index(max){
+    BMC(Aiger *aiger, int property_index, int nframes, int Thread_index, int max): Aiger(*aiger), property_index(property_index), nframes(nframes), thread_index(Thread_index), max_thread_index(max){
         start_time = std::chrono::steady_clock::now();  
         allbad.clear();
         check_init = 0;
+        max_index_of_ands_added_to_solver =0;
     }
     ~BMC(){
         if(bmcSolver != nullptr) delete bmcSolver;
@@ -180,6 +148,6 @@ public:
     void show_litvec(vector<int> &lv) const;
 
     static int terminate_callback(void * state) {
-        return (RESULT != 0);  // 返回全局变量 result 的值
+        return (RESULT != 0);  // Return the value of the global variable 'result'
     }
 };

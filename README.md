@@ -1,4 +1,4 @@
-# portfolioMC
+# modelchecker
 A 16-thread bit-level parallel MC solver, compatible with BMC and PDR
 
 ## Usage

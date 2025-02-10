@@ -147,9 +147,6 @@ lbool SimpSolver::solve_(bool do_simp, bool turn_off_simp)
 
 bool SimpSolver::addClause_(vec<Lit>& ps)
 {
-    // for(int i=0;i<ps.size();++i){
-    //     printf("%s%d ", (sign(ps[i])?"-":""), var(ps[i])+1);
-    // }puts("");
 #ifndef NDEBUG
     for (int i = 0; i < ps.size(); i++)
         assert(!isEliminated(var(ps[i])));
@@ -349,7 +346,6 @@ bool SimpSolver::backwardSubsumptionCheck(bool verbose)
     assert(decisionLevel() == 0);
 
     while (subsumption_queue.size() > 0 || bwdsub_assigns < trail.size()){
-        // printf("debug %d %d %d \n",subsumption_queue.size(), bwdsub_assigns, trail.size());
 
         // Empty subsumption queue and return immediately on user-interrupt:
         if (asynch_interrupt){
@@ -532,11 +528,9 @@ bool SimpSolver::eliminateVar(Var v)
     // Produce clauses in cross product:
     vec<Lit>& resolvent = add_tmp;
     for (int i = 0; i < pos.size(); i++)
-        for (int j = 0; j < neg.size(); j++){
-            // puts("elim var");
+        for (int j = 0; j < neg.size(); j++)
             if (merge(ca[pos[i]], ca[neg[j]], v, resolvent) && !addClause_(resolvent))
                 return false;
-        }
 
     // Free occurs list for this variable:
     occurs[v].clear(true);
@@ -573,7 +567,6 @@ bool SimpSolver::substitute(Var v, Lit x)
 
         removeClause(cls[i]);
 
-        puts("sub add");
         if (!addClause_(subst_clause))
             return ok = false;
     }
@@ -601,11 +594,6 @@ void SimpSolver::extendModel()
 
 bool SimpSolver::eliminate(bool turn_off_elim)
 {
-
-    // for(int i=0; i<nVars(); ++i){
-    //     printf("%d : %d %d\n",i, n_occ[mkLit(i,true)], n_occ[mkLit(i,false)]);
-    // }
-    // exit(0);
     if (!simplify())
         return false;
     else if (!use_simplification)
@@ -614,9 +602,6 @@ bool SimpSolver::eliminate(bool turn_off_elim)
     // Main simplification loop:
     //
     while (n_touched > 0 || bwdsub_assigns < trail.size() || elim_heap.size() > 0){
-
-        // printf("debug %d %d %d %d\n",n_touched, bwdsub_assigns, trail.size(), elim_heap.size());
-
 
         gatherTouchedClauses();
         // printf("  ## (time = %6.2f s) BWD-SUB: queue = %d, trail = %d\n", cpuTime(), subsumption_queue.size(), trail.size() - bwdsub_assigns);
@@ -653,7 +638,6 @@ bool SimpSolver::eliminate(bool turn_off_elim)
 
             // At this point, the variable may have been set by assymetric branching, so check it
             // again. Also, don't eliminate frozen variables:
-            // printf("elim %d\n",elim);
             if (use_elim && value(elim) == l_Undef && !frozen[elim] && !eliminateVar(elim)){
                 ok = false; goto cleanup; }
 
