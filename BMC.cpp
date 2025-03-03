@@ -97,80 +97,6 @@ void BMC::encode_init_condition(SATSolver *s){
     }
 }
 
-// translate the aiger language to internal states
-void BMC::translate_to_dimacs(){
-    // load inputs
-    for(int i=1; i<=num_inputs; ++i){
-        assert((i)*2 == Aiger_inputs[i-1]);
-        variables.push_back(Variable(1 + i, 'i', i-1, false));
-    }
-
-    // load latches
-    for(int i=1; i<=num_latches; ++i){
-        assert((num_inputs+i)*2 == Aiger_latches[i-1].l);
-        variables.push_back(Variable(1 + num_inputs + i, 'l', i-1, false));
-    }
-    
-    // load ands
-    for(int i=1; i<=num_ands; ++i){
-        assert(2*(num_inputs+num_latches+i) == Aiger_ands[i-1].o);
-        int o = 1+num_inputs+num_latches+i;
-        int i1 = aiger_to_dimacs(Aiger_ands[i-1].i1);
-        int i2 = aiger_to_dimacs(Aiger_ands[i-1].i2);
-        variables.push_back(Variable(o, 'a', i-1, false));
-        ands.push_back(And(o, i1, i2));
-    }
-
-    // deal with initial states
-    for(int i=1; i<=num_latches; ++i){
-        int l = 1 + num_inputs + i;
-        assert((l-1)*2 == Aiger_latches[i-1].l);
-        Aiger_latch & al = Aiger_latches[i-1];
-        nexts.push_back(aiger_to_dimacs(al.next));
-        if(al.default_val==0){
-            init_state.push_back(-l);
-        }else if(al.default_val==1){
-            init_state.push_back(l);
-        }
-    }
-
-    // deal with constraints
-    for(int i=0; i<num_constraints; ++i){
-        int cst = Aiger_constraints[i];
-        constraints.push_back(aiger_to_dimacs(cst));
-    }
-
-    // load bad states
-    if(num_bads > 0 && num_bads > property_index){
-        int b = Aiger_bads[property_index];
-        bad = aiger_to_dimacs(b);
-        for(int i=0; i<num_bads; i++){
-            b = Aiger_bads[i];
-            allbad.push_back(aiger_to_dimacs(b));
-        }
-    }else if(num_outputs > 0 && num_outputs > property_index){
-        int output = Aiger_outputs[property_index];
-        bad = aiger_to_dimacs(output);
-        for(int i=0; i<num_outputs; i++){
-            output = Aiger_outputs[i];
-            allbad.push_back(aiger_to_dimacs(output));
-        }
-    }else{
-        assert(false);
-    }
-    assert(abs(bad) <= variables.size());
-
-    //show_bads();
-
-    //show_constraints();
-
-    //show_variables();
-    
-    //show_ands();
-
-    //show_nexts();
-}
-
 // LC and RC are two child nodes of an AND gate, which can be positive or negative, and can be latch/input
 int BMC::Aig_And(int p0, int p1){  // input primitive var p0, p1, return unfold var p0 * p1
     int first_ands_index = num_inputs + num_latches + 2;     // = ands[0].o
@@ -261,13 +187,12 @@ void BMC::unfold(){
             continue;
         }
         
-        //simplification failure
+        //simplification failure, try to calculate a new AND gate
         if (values[ands[i].o] == 0){
-            //获取原电路的与门o = ia * ib的当前值 存入新与门
             int i1, i2, output = 0;
             i1 = value(ands[i].i1);
             i2 = value(ands[i].i2);
-            // 查找i1的父节点是否存在相同的子节点i2（等价性验证）
+            // Check whether the parent node of i1 has another child node i2 with the same value (equivalence verification)
             for(int k=0; k<(uaiger->hash_table[abs(i1)]).size(); k++ ){
                 if( (uaiger->hash_table[abs(i1)][k]).i1 == i1 && (uaiger->hash_table[abs(i1)][k]).i2 == i2){
                     values[i+num_inputs+num_latches+2] = (uaiger->hash_table[abs(i1)][k]).o;
@@ -278,14 +203,13 @@ void BMC::unfold(){
                     output = (uaiger->hash_table[abs(i1)][k]).o;
                 }  
             }
-            //不存在已有的等价节点
+            // no existing equivalent node
             if (values[ands[i].o] == 0){
-                //化简与门失败 新建and gate 变量x 变量索引等于变量id
+                // fail to simplify ands[i], new AND gate
                 uaiger->nodes.push_back(Node(3, 0, i1, i2));        
                 uaiger->nodes[abs(i1)].fathers++;
                 uaiger->nodes[abs(i2)].fathers++;
 
-                //记录与门o的当前值为x 
                 values[i+num_inputs+num_latches+2] = uaiger->nsize()-1;
                 output = uaiger->nsize()-1;
 
@@ -293,7 +217,6 @@ void BMC::unfold(){
                 (uaiger->hash_table[abs(i1)]).push_back(And(output, i1, i2));
                 (uaiger->hash_table[abs(i2)]).push_back(And(output, i1, i2));
             }
-            //如果与门是不变式约束节点 则fathers+1
             //if(and_is_cons == 1)  uaiger->nodes[abs(values[ands[i].o])].fathers++;
             if(unfold_ands && i<500)    cout << ands[i].o << " " << ands[i].i1 << " " << ands[i].i2 << "->" << output << " " << i1 << " " << i2 << endl;   
         }
@@ -305,8 +228,8 @@ void BMC::unfold(){
     //deal with output
     for(int index=0; index<allbad.size(); index++){
         int newbad = value(allbad[index]);
-        uaiger->outputs.push_back(newbad); //uaiger->outputs.push_back(value(bad));
-        uaiger->nodes[abs(newbad)].fathers++; //uaiger->nodes[abs(value(bad))].fathers++;
+        uaiger->outputs.push_back(newbad);       //uaiger->outputs.push_back(value(bad));
+        uaiger->nodes[abs(newbad)].fathers++;    //uaiger->nodes[abs(value(bad))].fathers++;
     }
     //deal with register
     if(unfold_latches) cout << "unfold latches" << endl;
@@ -320,9 +243,17 @@ void BMC::unfold(){
 }
 
 void BMC::initialize(){
-    if(!no_output) cout<<"c BMC constructed from aiger file [Finished] "<<endl; 
-    translate_to_dimacs();
-    if(!no_output) cout << "start BMC initialize" <<endl;
+    //show_bads();
+
+    //show_constraints();
+
+    //show_variables();
+    
+    //show_ands();
+
+    //show_nexts();
+
+    //cout << "start BMC initialize" <<endl;
 
     //check init
     bmcSolver = new CaDiCaL();
@@ -343,10 +274,10 @@ void BMC::initialize(){
     bmc_frame_k = 0;
 
     //unfold init
-    if(!no_output) cout << "start BMC unfold" <<endl;
+    //cout << "start BMC unfold" <<endl;
     uaiger->nodes.push_back(Node(0, 0, 0, 0));  // string("NULL")
     uaiger->nodes.push_back(Node(1, 0, 0, 0));  // string("False")
-    //deal with init latches 存储latch的真实初始值(init = false = x1 或 init = true = -x1)
+    //deal with init latches (init = false = x1, or init = true = -x1)
     values.resize(variables.size());
     values[1] = 1;                         // x1 = false                  
     for(int latch: init_state){
@@ -354,7 +285,7 @@ void BMC::initialize(){
             else if(latch < 0) values[-latch] = 1;
     }
     for(int i=0; i<=num_latches-1; ++i){
-        uaiger->nodes.push_back(Node(2, 0, 0, 0)); // 从 uaiger 的第三个元素开始
+        uaiger->nodes.push_back(Node(2, 0, 0, 0)); // satrt from the 3rd node of uaiger
         if(values[i+num_inputs+2] == 0){
             values[i+num_inputs+2] = uaiger->nsize()-1;       
         } 
@@ -373,47 +304,45 @@ int BMC::check(){
             std::lock_guard<std::mutex> lock(result_mutex);
             if(RESULT == 0){
                 RESULT = 10;
-                if(!no_output) uaiger->show_statistics();
-                if(!no_output) cout << "Output was asserted in frame." << endl;
-                cout << "1\n";
-                cout << "b0\n";
-                vector<char> a(num_inputs + num_latches + 2, 'x');
-                for(int latch: init_state)
-                    a[abs(latch)] = (latch>0?'1':'0');
-                for(int i=0; i<num_latches; ++i){
-                    int latch_index = unprimed_first_dimacs + num_inputs + i;
-                    //cout << latch_index << " ";
-                    if(a[latch_index] == 'x'){
-                        int assignment = bmcSolver->val(unprimed_first_dimacs + i);
-                        if(assignment != 0)
-                            a[latch_index] = (assignment<0?'0':'1');
+                if(moreinfo_for_bmc) uaiger->show_statistics();
+                if(moreinfo_for_bmc) cout << "Output was asserted in frame." << endl;
+                if(output_witness){
+                    cout << "1\n";
+                    cout << "b0\n";
+                    vector<char> a(num_inputs + num_latches + 2, 'x');
+                    for(int latch: init_state)
+                        a[abs(latch)] = (latch>0?'1':'0');
+                    for(int i=0; i<num_latches; ++i){
+                        int latch_index = unprimed_first_dimacs + num_inputs + i;
+                        //cout << latch_index << " ";
+                        if(a[latch_index] == 'x'){
+                            int assignment = bmcSolver->val(unprimed_first_dimacs + i);
+                            if(assignment != 0)
+                                a[latch_index] = (assignment<0?'0':'1');
+                        }
+                        //cout << a[latch_index] << " ";
+                        cout << a[latch_index];
                     }
-                    //cout << a[latch_index] << " ";
-                    cout << a[latch_index];
-                }
-                cout << endl;
-                int inputCount = 0;
-                for(int i : uaiger->inputs){
-                    int assignment = bmcSolver->val(i);
-                    if(assignment != 0)
-                        cout << (assignment<0?'0':'1');
-                    else 
-                        cout << 'x';
-                    inputCount++;
-                    if(inputCount % num_inputs == 0)  cout << '\n';
-                }
-                cout << ".\n";       
+                    cout << endl;
+                    int inputCount = 0;
+                    for(int i : uaiger->inputs){
+                        int assignment = bmcSolver->val(i);
+                        if(assignment != 0)
+                            cout << (assignment<0?'0':'1');
+                        else 
+                            cout << 'x';
+                        inputCount++;
+                        if(inputCount % num_inputs == 0)  cout << '\n';
+                    }
+                    cout << ".\n";    
+                }   
             }
             return 10;
         } 
-        if(res == 0) // || abs((uaiger->outputs).back()) > 99900000
-            break;
+        if(res == 0 || abs((uaiger->outputs).back()) > max_nodes) 
+            return 0; // bmcsolver terminate
     } 
-    if(!no_output){
-        uaiger->show_statistics();
-        cout << "No output asserted in frames." << endl; 
-    }
-    return 0;
+    return 0; // safe in frames
 }
 
 // check one frame
@@ -440,9 +369,9 @@ int BMC::solve_one_frame(){
     if(use_coi == 0) lowbound = max_index_of_ands_added_to_solver + 1;
 
     for(int i = (uaiger->ands).size()-1; i>=lowbound; i--){   
-        And a = uaiger->ands[i];            
-        //判断这个与门是否被add过 判断这个与门是否需要是COI
-        
+        And a = uaiger->ands[i]; 
+
+        //judge if the AND gate is added before, or use coi 
         if(use_coi){
             if(lit_has_insert[i] == 1 || lit_set.find(a.o) == lit_set.end()){
                 continue;
@@ -465,8 +394,8 @@ int BMC::solve_one_frame(){
         return 20;
     }
 
-    //从某一步开始检测
-    // if(bmc_frame_k < 610){
+    // skip steps
+    // if(bmc_frame_k < 100){
     //     bmcSolver->add(-bad); bmcSolver->add(0); 
     //     if(bmc_frame_k < 10 || bmc_frame_k % 20 == 0) cout << "frames = "<< bmc_frame_k <<", bad = " << bad << ", skip" << endl;
     //     return 20;
@@ -476,17 +405,14 @@ int BMC::solve_one_frame(){
     int result = bmcSolver->solve();
     if(result == 20){
         bmcSolver->add(-bad); bmcSolver->add(0); 
-        if(no_output) return 20;
-        if(true || bmc_frame_k < 10 || bmc_frame_k % 20 == 0) cout << "frames = "<< bmc_frame_k <<", bad = " << bad << ", res = " << result << endl;
+        if(moreinfo_for_bmc) cout << "frames = "<< bmc_frame_k <<", bad = " << bad << ", res = " << result << endl;
         return 20;
     } 
     else if(result == 10){
-        if(no_output) return 10;
-        cout << "frames = "<< bmc_frame_k <<", bad = " << bad << ", res = " << result << endl;
+        if(moreinfo_for_bmc) cout << "frames = "<< bmc_frame_k <<", bad = " << bad << ", res = " << result << endl;
         return 10;
     }
     else{
-        if(!no_output) cout << "bmcsolver terminate\n";
-        return 0;
+        return 0;  // bmcsolver terminate
     }
 }

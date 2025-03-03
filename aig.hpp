@@ -1,9 +1,7 @@
 #pragma once
 
-#include <iostream>
 #include <fstream>
 #include <sstream>
-#include <string>
 #include <vector>
 #include <map>
 #include <mutex>
@@ -54,7 +52,7 @@ public:
         if(prime)
             ss << "'";
         ss >> name;
-}
+    }
 };
 
 // not support justice and fairness now;
@@ -85,15 +83,16 @@ public:
     vector<int> nexts, init_state;  //set<int> set_init_state;
     vector<int> constraints, constraints_prime;
     vector<int> allbad;
-    int bad, bad_prime;
+    int bad, bad_prime, propertyIndex;
+    bool output_witness, output_certificate;
 
     //for ic3base
     map<int, int> map_to_prime, map_to_unprime; // used for mapping ands
     const int unprimed_first_dimacs = 2;
-
-
+    int primed_first_dimacs;
 
     Aiger();
+    void translate_to_dimacs();
 };
 
-Aiger* load_aiger_from_file(string str);
+Aiger* load_aiger_from_file(string str, int pi, bool witness, bool certificate);

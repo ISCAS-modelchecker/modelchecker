@@ -6,7 +6,6 @@
 #include "aig.hpp"
 #include "sat_solver.hpp"
 //#include <atomic>
-using namespace std;
 
 // Cone: constraints, bad, latches
 // Real_Init: latches_default /\ constraints
@@ -140,14 +139,8 @@ class PDR : public Aiger
     Aiger *uaiger;
     
     // the interal data structure for Aiger (in CNF dimacs format).
-    
-
-    
-    int primed_first_dimacs;
-    int property_index;
     int thread_index;
     int main_thread_index;
-    
     
     // for IC3
     minisatSimp *satelite = nullptr;
@@ -158,7 +151,7 @@ class PDR : public Aiger
     //minisatCore *lift = nullptr;
     // minisatCore *init = nullptr;
     int notInvConstraints, restart_depth;
-    bool satelite_unsat, use_pr, use_sc, use_acc, use_plusone_count;
+    bool satelite_unsat, use_pr, use_acc, use_plusone_count;
 
     State *cex_state_idx = nullptr;
     bool find_cex = false;
@@ -191,11 +184,10 @@ public:
     // for incremental check
     bool first_incremental_check;
 
-    PDR(Aiger *aiger, int Thread_index, bool acc, bool pr, bool sc, bool ao): Aiger(*aiger), thread_index(Thread_index), use_acc(acc), use_pr(pr), use_sc(sc), use_plusone_count(ao){
+    PDR(Aiger *aiger, int Thread_index, bool acc, bool pr, bool ao): Aiger(*aiger), thread_index(Thread_index), use_acc(acc), use_pr(pr), use_plusone_count(ao){
         start_time = std::chrono::steady_clock::now();
         nPush = nUnpush = nCore = nCorelen = nCube = nCubelen = nProp = nkCore = nkobl = nobl = 0;
         first_incremental_check = 1;
-        property_index = 0;
         satelite_unsat = 0;
         restart_depth = 5;
         if(Thread_index >= 0){

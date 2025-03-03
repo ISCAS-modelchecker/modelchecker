@@ -29,6 +29,82 @@ Aiger::Aiger(){
     map_to_unprime.clear();
 }
 
+void Aiger::translate_to_dimacs(){
+    variables.push_back(Variable(0, string("NULL")));
+    variables.push_back(Variable(1, string("False")));
+
+    // load inputs
+    for(int i=1; i<=num_inputs; ++i){
+        assert((i)*2 == Aiger_inputs[i-1]);
+        variables.push_back(Variable(1 + i, 'i', i-1, false));
+    }
+
+    // load latches
+    for(int i=1; i<=num_latches; ++i){
+        assert((num_inputs + i)*2 == Aiger_latches[i-1].l);
+        variables.push_back(Variable(1 + num_inputs + i, 'l', i-1, false));
+    }
+
+    // load ands
+    for(int i=1; i<=num_ands; ++i){
+        assert(2*(num_inputs + num_latches + i) == Aiger_ands[i-1].o);
+        int o = 1 + num_inputs + num_latches + i;
+        int i1 = aiger_to_dimacs(Aiger_ands[i-1].i1);
+        int i2 = aiger_to_dimacs(Aiger_ands[i-1].i2);
+        variables.push_back(Variable(o, 'a', i-1, false));
+        ands.push_back(And(o, i1, i2));
+    }
+
+    // deal with initial states
+    for(int i=1; i<=num_latches; ++i){
+        int l = 1 + num_inputs + i;
+        assert((l-1)*2 == Aiger_latches[i-1].l);
+        Aiger_latch & al = Aiger_latches[i-1];
+        nexts.push_back(aiger_to_dimacs(al.next));
+        if(al.default_val==0){
+            init_state.push_back(-l);
+        }else if(al.default_val==1){
+            init_state.push_back(l);
+        }
+    }
+
+    // deal with constraints
+    for(int i=0; i<num_constraints; ++i){
+        int cst = Aiger_constraints[i];
+        constraints.push_back(aiger_to_dimacs(cst));
+    }
+
+    // load bad states
+    if(num_bads > 0){
+        if (num_bads <= propertyIndex){
+            cerr << "Warning: property_index out of range (must be between 0 and " << num_bads - 1 << "). Setting to 0." << std::endl;
+            propertyIndex = 0;
+        }
+        bad = aiger_to_dimacs(Aiger_bads[propertyIndex]);
+        for(int i=0; i<num_bads; i++){
+            allbad.push_back(aiger_to_dimacs(Aiger_bads[i]));
+        }
+    }else if(num_outputs > 0){
+        cerr << "Warning: The outputs have been regarded as bads as they are not empty." << std::endl;
+        if (num_outputs <= propertyIndex){
+            cerr << "Warning: property_index out of range (must be between 0 and " << num_outputs - 1 << "). Setting to 0." << std::endl;
+            propertyIndex = 0;
+        }        
+        bad = aiger_to_dimacs(Aiger_outputs[propertyIndex]);
+        for(int i=0; i<num_outputs; i++){
+            allbad.push_back(aiger_to_dimacs(Aiger_outputs[i]));
+        }
+    }else{
+        cerr << "Error: No properties to verify (no bad states or outputs declared in the circuit). Exiting." << std::endl;
+        assert(false);
+    }
+    assert(abs(bad) <= variables.size());
+
+    //prepare for prime
+    primed_first_dimacs = variables.size();
+    assert(primed_first_dimacs == 1 + num_inputs + num_latches + num_ands + 1);
+}
+
 int read_literal(unsigned char **fbuf){
     char c = **fbuf;
     while(c<'0' || c>'9'){
@@ -56,8 +132,7 @@ unsigned decode(unsigned char **fbuf){
     return x | (ch << (7 * i));
 }
 
-void encode (string& str, unsigned x)
-{
+void encode (string& str, unsigned x){
     unsigned char ch;
     while (x & ~0x7f){
         ch = (x & 0x7f) | 0x80;
@@ -69,8 +144,11 @@ void encode (string& str, unsigned x)
 }
 
 
-Aiger* load_aiger_from_file(string str){
+Aiger* load_aiger_from_file(string str, int pi, bool witness, bool certificate){
     Aiger *aiger = new Aiger;
+    aiger->propertyIndex = pi;
+    aiger->output_witness = witness;
+    aiger->output_certificate = certificate;
     
     ifstream fin(str);
     fin.seekg(0, ios::end);
@@ -171,7 +249,6 @@ Aiger* load_aiger_from_file(string str){
             if(aig_veb == 2)
                 printf("c read and %d <- %d, %d\n", o, i1, i2);
         }
-
     }else{
         int o, i1, i2;
         for(int i=0; i<aiger->num_ands; ++i){
@@ -256,11 +333,6 @@ Aiger* load_aiger_from_file(string str){
             , aiger->num_justice
             , aiger->num_fairness);
     }
-
-    //translate to dimacs
-    aiger->variables.push_back(Variable(0, string("NULL")));
-    aiger->variables.push_back(Variable(1, string("False")));
-
 
     return aiger;
 }

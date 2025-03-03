@@ -5,7 +5,6 @@
 #include <set>
 #include "aig.hpp"
 #include "sat_solver.hpp"
-using namespace std;
 
 class Node{
 public:
@@ -90,11 +89,8 @@ public:
     
     // the interal data structure for Aiger (in CNF dimacs format).
     
-    int primed_first_dimacs;
-    int property_index;
-    
     //for BMC unfold
-    int nframes;
+    int nframes, max_nodes;
     vector<int> values;   // "real value of each node" corresponds to "variables"
     int tempvalue[999999];
     bool check_init;
@@ -112,18 +108,15 @@ public:
     int thread_index;
     int max_thread_index;
 
-    BMC(Aiger *aiger, int property_index, int nframes, int Thread_index, int max): Aiger(*aiger), property_index(property_index), nframes(nframes), thread_index(Thread_index), max_thread_index(max){
+    BMC(Aiger *aiger, int nframes, int Thread_index, int max): Aiger(*aiger), nframes(nframes), thread_index(Thread_index), max_thread_index(max){
         start_time = std::chrono::steady_clock::now();  
-        allbad.clear();
         check_init = 0;
         max_index_of_ands_added_to_solver =0;
+        max_nodes = INT_MAX;
     }
     ~BMC(){
         if(bmcSolver != nullptr) delete bmcSolver;
     }
-
-    // Aiger
-    void translate_to_dimacs();
 
     // Main BMC framework
     void initialize(); 

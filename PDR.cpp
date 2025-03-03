@@ -109,9 +109,9 @@ void PDR::log_witness(){
 }
 
 void PDR::show_witness(){
-    bool need_delete = true;
     assert(find_cex);
-    if(!no_output) cout <<"AIGER witness:\n";
+    //cout <<"AIGER witness:\n";
+    if(!output_witness) return;
     cout << "1\n";
     cout << "b0\n";
     int initial_state = 1;
@@ -123,12 +123,12 @@ void PDR::show_witness(){
         cout << return_input(s) + "\n";
     }
     cout << ".\n";
-    if(!no_output) cout<<"witness with transition:\n";
+
+    if(!output_witness_with_latch) return;
+    cout << "witness with transition:\n";
     for(auto s : cex_states){
-        if(!no_output) cout << return_state(s) + "\n";
-        if(need_delete){
-            delete s;
-        }
+        cout << return_state(s) + "\n";
+        delete s;
     }
 }
 
@@ -183,7 +183,7 @@ void PDR::show_frames(){
 void PDR::show_aag(){
     std::ofstream file("certificate.aag");
     if (!file.is_open()) {
-        std::cerr << "Error: Could not open file " << "certificate.aag" << " for writing." << std::endl;
+        cerr << "Error: Could not open file " << "certificate.aag" << " for writing.\n";
         return;
     }    
     file << "aag " << (num_inputs + num_latches + num_ands) << " " << num_inputs << " " << num_latches << " 0 " << num_ands << " 1";
@@ -256,66 +256,7 @@ void PDR::simplify_aiger(){
 
 // translate the aiger language to internal states
 void PDR::translate_to_dimacs(){
-
-    // load inputs
-    num_inputs = num_inputs;
-    for(int i=1; i<=num_inputs; ++i){
-        assert((i)*2 == Aiger_inputs[i-1]);
-        variables.push_back(Variable(1 + i, 'i', i-1, false));
-    }
-
-    // load latches
-    num_latches = num_latches;
-    for(int i=1; i<=num_latches; ++i){
-        assert((num_inputs+i)*2 == Aiger_latches[i-1].l);
-        variables.push_back(Variable(1 + num_inputs + i, 'l', i-1, false));
-    }
-
-    // load ands
-    num_ands = num_ands;
-    for(int i=1; i<=num_ands; ++i){
-        assert(2*(num_inputs+num_latches+i) == Aiger_ands[i-1].o);
-        int o = 1+num_inputs+num_latches+i;
-        int i1 = aiger_to_dimacs(Aiger_ands[i-1].i1);
-        int i2 = aiger_to_dimacs(Aiger_ands[i-1].i2);
-        variables.push_back(Variable(o, 'a', i-1, false));
-        ands.push_back(And(o, i1, i2));
-    }
-
-    // deal with initial states
-    for(int i=1; i<=num_latches; ++i){
-        int l = 1 + num_inputs + i;
-        assert((l-1)*2 == Aiger_latches[i-1].l);
-        Aiger_latch & al = Aiger_latches[i-1];
-        nexts.push_back(aiger_to_dimacs(al.next));
-        if(al.default_val==0){
-            init_state.push_back(-l);
-        }else if(al.default_val==1){
-            init_state.push_back(l);
-        }
-    }
-
-    // deal with constraints
-    for(int i=0; i<num_constraints; ++i){
-        int cst = Aiger_constraints[i];
-        constraints.push_back(aiger_to_dimacs(cst));
-    }
-
-    // load bad states
-    if(num_bads > 0 && num_bads > property_index){
-        int b = Aiger_bads[property_index];
-        bad = aiger_to_dimacs(b);
-    }else if(num_outputs > 0 && num_outputs > property_index){
-        int output = Aiger_outputs[property_index];
-        bad = aiger_to_dimacs(output);
-    }else{
-        assert(false);
-    }
-    assert(abs(bad) <= variables.size());
-
     // load inputs prime
-    primed_first_dimacs = variables.size();
-    assert(primed_first_dimacs == 1 + num_inputs + num_latches + num_ands + 1);
     for(int i=0; i<num_inputs; ++i){
         variables.push_back(
             Variable(primed_first_dimacs + i, 'i', i, true));
@@ -410,8 +351,8 @@ void PDR::show_uaiger(){ //suppose all latch init to 0, and the bad property is 
     file.close(); 
     std::string command = "./aigtoaig unfold" + to_string(depth) + ".aag unfold" + to_string(depth) + ".aig" ;
     int result = system(command.c_str());
-    command = "/home/zhulf/project/circuitsat/build/csat --instance=/home/zhulf/portfolioMC2/unfold" + to_string(depth) + ".aig" ;
-    result = system(command.c_str());
+    // command = "../project/circuitsat/build/csat --instance=./unfold" + to_string(depth) + ".aig" ;
+    // result = system(command.c_str());
 }
 
 void PDR::initialize_heuristic(){
@@ -470,7 +411,7 @@ void PDR::initialize(){
     //show_uaiger();
 
     nQuery = nCTI = nCTG = nmic = nCoreReduced = nAbortJoin = nAbortMic = 0;
-    if(!no_output) cout<<"c PDR constructed from aiger file [Finished] \n";
+    //cout<<"c PDR constructed from aiger file [Finished] \n";
 }
 
 void PDR::new_frame(){
@@ -500,7 +441,7 @@ void PDR::add_cube(Cube &cube, int k, bool to_all, bool ispropagate, int prtimes
 
     if(output_stats_for_addcube and !ispropagate) {
         cout<<"add Cube: (sz"<<cube.size()<<") to "<<k<<" : ";
-        show_litvec(cube); //for(int i=0; i<cube.size(); i++) cout << cube[i] << " "; cout << endl;
+        show_litvec(cube); 
     }
     if(to_all){
         for(int i=1; i< k; ++i){
@@ -517,10 +458,9 @@ void PDR::add_cube(Cube &cube, int k, bool to_all, bool ispropagate, int prtimes
         updateLitOrder(cube, k);
 }
 
-bool PDR::is_init(vector<int> &latches){ //to be done
+bool PDR::is_init(vector<int> &latches){ //to be optimized
     if(init == nullptr){
-        init = new CaDiCaL();
-        // init = new minisatCore();
+        init = new CaDiCaL();       // init = new minisatCore();
         encode_init_condition(init);
     }
     for(int l : latches)
@@ -806,8 +746,7 @@ void PDR::encode_lift(SATSolver *s){
 void PDR::extract_state_from_sat(SATSolver *sat, State *s, State *succ, int findex){
     s->clear();
     if(lift == nullptr){
-        lift = new CaDiCaL();
-        //lift = new minisatCore();
+        lift = new CaDiCaL();   //lift = new minisatCore();
         encode_lift(lift);
     }
 
@@ -1170,7 +1109,7 @@ bool PDR::propagate(){
                 frames[i+1].cubes.insert(badcube);
             }
             if(output_stats_for_frames)  show_frames();
-            if(print_certifacate){
+            if(output_certificate){
                 for(int d = i+2; d <= depth()+1; d++){
                     for(const Cube &c : frames[d].cubes)
                         frames[i+1].cubes.insert(c);
@@ -1205,7 +1144,7 @@ bool PDR::propagate(){
                     num_ands++;
                 }
                 bad = -invariant;
-                //show_aag();
+                show_aag();
             }
             return true;
         }
@@ -1433,24 +1372,21 @@ int PDR::check(){
 
     if(!check_BMC0()) {
         std::lock_guard<std::mutex> lock(result_mutex);
-        if(!no_output) cout << "Thread " << thread_index << " check BMC0 failed" << endl;
         if(RESULT == 0){
             RESULT = 10;
             show_witness();
         }
         return 10;
     }
-    if(!no_output) cout << "Thread " << thread_index << " check BMC0 successed" << endl;
     if(!check_BMC1()) {
         std::lock_guard<std::mutex> lock(result_mutex);
-        if(!no_output) cout << "Thread " << thread_index << " check BMC1 failed" << endl;
         if(RESULT == 0){
             RESULT = 10;
             show_witness();
         }
         return 10;
     }
-    if(!no_output) cout << "Thread " << thread_index << " check BMC1 successed" << endl;
+
     // main loop of IC3, start from depth = 1.
     // Fk need to hold -Bad all the time
     new_frame();
@@ -1460,7 +1396,7 @@ int PDR::check(){
     int result = 10;
     int ct = 0;
     while(true){
-        if(RESULT!=0) return RESULT;
+        if(RESULT!=0) return 0;
         if(restart and depth() > restart_depth){
             for(auto f : frames){
                 if(f.solver != nullptr)
@@ -1564,11 +1500,11 @@ int PDR::check(){
             new_frame();
             top_frame_cannot_reach_bad = true;
             earliest_strengthened_frame = depth();
-            if(!no_output) cout << "pdr" + to_string(thread_index) + "_step = " +  to_string(earliest_strengthened_frame) + "\n";
+            if(moreinfo_for_pdr) cout << "pdr" + to_string(thread_index) + "_step = " +  to_string(earliest_strengthened_frame) + "\n";
         }
     }
     int d = depth();
-    if(!no_output) cout <<  "depth" + to_string(thread_index) + " = " + to_string(d) + "\n";
+    if(moreinfo_for_pdr) cout <<  "depth" + to_string(thread_index) + " = " + to_string(d) + "\n";
 
     for(auto f : frames){
         if(f.solver != nullptr)

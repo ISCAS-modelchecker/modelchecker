@@ -1,4 +1,8 @@
 #pragma once
+#include <iostream>
+#include <string>
+#include <cctype>
+#include <cstdlib>
 
 //for PDR enhancement
 #define use_heuristic 1
@@ -13,8 +17,8 @@
 #define share_memory_test 0   
 
 //for PDR log
-#define no_output 0
-#define print_certifacate 0
+#define moreinfo_for_pdr 0
+#define output_witness_with_latch 0
 #define output_stats_for_recblock 0
 #define output_stats_for_heuristic 0
 #define output_stats_for_extract 0
@@ -28,6 +32,7 @@
 
 //for BMC log
 #define aig_veb 0
+#define moreinfo_for_bmc 0
 #define unfold_ands 0
 #define unfold_latches 0
 #define output_aigand 0
@@ -106,4 +111,26 @@ inline int dimacs_to_aiger(int lit){
     }else{
         return res;
     }
+}
+
+inline bool isNumber(const std::string& str) {
+    if (str.empty()) return false;
+    for (char c : str) {
+        if (!std::isdigit(c)) return false;
+    }
+    return true;
+}
+
+inline int validateInput(const std::string& arg, const std::string& value, int min, int max, int defaultValue) {
+    if (!isNumber(value)) {
+        std::cerr << "Warning: " << arg << " value must be a number. Setting to " << defaultValue << "." << std::endl;
+        return defaultValue;
+    }
+
+    int num = std::atoi(value.c_str());
+    if (num < min || num > max) {
+        std::cerr << "Warning: " << arg << " value must be between " << min << " and " << max << ". Setting to " << defaultValue << "." << std::endl;
+        return defaultValue;
+    }
+    return num;
 }
