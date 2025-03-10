@@ -32,7 +32,7 @@
 
 //for BMC log
 #define aig_veb 0
-#define moreinfo_for_bmc 0
+#define moreinfo_for_bmc 1
 #define unfold_ands 0
 #define unfold_latches 0
 #define output_aigand 0

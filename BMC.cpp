@@ -226,11 +226,10 @@ void BMC::unfold(){
         (uaiger->constraints).push_back(value(constraints[i]));
     }
     //deal with output
-    for(int index=0; index<allbad.size(); index++){
-        int newbad = value(allbad[index]);
-        uaiger->outputs.push_back(newbad);       //uaiger->outputs.push_back(value(bad));
-        uaiger->nodes[abs(newbad)].fathers++;    //uaiger->nodes[abs(value(bad))].fathers++;
-    }
+    int newbad = value(allbad[propertyIndex]);
+    uaiger->outputs.push_back(newbad);       //uaiger->outputs.push_back(value(bad));
+    uaiger->nodes[abs(newbad)].fathers++;    //uaiger->nodes[abs(value(bad))].fathers++;
+    
     //deal with register
     if(unfold_latches) cout << "unfold latches" << endl;
     for(int i=0; i<=num_latches-1; ++i){

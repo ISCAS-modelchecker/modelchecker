@@ -80,7 +80,7 @@ void Aiger::translate_to_dimacs(){
             cerr << "Warning: property_index out of range (must be between 0 and " << num_bads - 1 << "). Setting to 0." << std::endl;
             propertyIndex = 0;
         }
-        bad = aiger_to_dimacs(Aiger_bads[propertyIndex]);
+        bad = aiger_to_dimacs(Aiger_bads[propertyIndex]); 
         for(int i=0; i<num_bads; i++){
             allbad.push_back(aiger_to_dimacs(Aiger_bads[i]));
         }
