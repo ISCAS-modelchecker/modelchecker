@@ -19,7 +19,7 @@ make -j
 
 
 #### **Options:**
-- `-findbug`  — Run single-threaded BMC for each property and stop if a bug is found. Ignores all other parameters.
+- `-findbug [nframes]`  — Run single-threaded BMC for each property up to `nframes` steps. Ignores all other parameters. Default: INT_MAX.
 - `-bmc <bmc_thread>`  — Set the number of BMC threads (0-12). Default: 0  
 - `-pdr <pdr_thread>`  — Set the number of PDR threads (0-4). Default: 0  
 - `-pindex <property_index>`  — Specify the property index for verification. Default: 0  

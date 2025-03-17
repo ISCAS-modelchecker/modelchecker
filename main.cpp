@@ -5,13 +5,12 @@
 #include <errno.h>
 using namespace std::chrono;
 
-int pdr_thread = 0, current_pdr_execution = 0, bmc_thread = 0, current_bmc_execution = 0;
+int pdr_thread = 0, current_pdr_execution = 0, bmc_thread = 0, current_bmc_execution = 0, nframes = INT_MAX-1;
 
 void *thread_start_bmc(void *aiger){
-    int nframes = INT_MAX;
     int thread_index = current_bmc_execution++; //start from 0
     Aiger* aiger_data = ((Aiger *)aiger); 
-    BMC bmc(aiger_data, nframes, thread_index, bmc_thread);
+    BMC bmc(aiger_data, nframes + 1, thread_index, bmc_thread);
     int res_bmc = bmc.check(); 
     if(aiger_data->moreinfo_for_bmc and res_bmc) 
         cout << "best configuration: bmc thread " + to_string(thread_index) + "\n";
@@ -33,7 +32,7 @@ int main(int argc, char **argv){
     if (argc == 2 && std::string(argv[1]) == "-h") {
         std::cout << "USAGE: ./modelchecker [OPTIONS] <aig-file>\n\n"
                      "OPTIONS:\n"
-                     "  -findbug                 Run single-threaded BMC for each property and stop if a bug is found. Ignores all other parameters."
+                     "  -findbug [nframes]       Run single-threaded BMC for each property to `nframes` steps. Ignores all other parameters. Default: INT_MAX\n"
                      "  -bmc <bmc_thread>        Set the number of BMC threads (0-12). Default: 0\n"
                      "  -pdr <pdr_thread>        Set the number of PDR threads (0-4). Default: 0\n"
                      "  -pindex <property_index> Specify the property index for verification. Default: 0\n"
@@ -61,10 +60,15 @@ int main(int argc, char **argv){
             witness = 1;
         else if (arg == "-certificate")
             certificate = 1;
-        else if (arg == "-findbug")
-            find_bug_only = 1;
         else if (arg == "-v")
             log = 1;
+        else if (arg == "-findbug"){
+            find_bug_only = 1;
+            if (i + 1 < argc && isdigit(argv[i + 1][0])){
+                string value = argv[++i];
+                nframes = validateInput(arg, value, 0, INT_MAX-1, INT_MAX-1);
+            }
+        }
         else if (arg == "-bmc" || arg == "-pdr" || arg == "-pindex"){
             if (i + 1 >= argc) {
                 cerr << "Error: Missing value for " << arg << ". Defaulting to 0.\n";
@@ -86,6 +90,7 @@ int main(int argc, char **argv){
         pthread_t tbug[64];
         bmc_thread = 1;
         aiger->output_witness = 1;
+        aiger->moreinfo_for_bmc = 0;
         for(int t = 0; t < aiger->num_property; t++){
             // aiger->bad = aiger->allbad[t];
             // aiger->propertyIndex = 0;
@@ -114,7 +119,11 @@ int main(int argc, char **argv){
             pthread_join(tbmc[t], NULL);
     }
 
-    if(RESULT  == 10 and !find_bug_only)
+    if(find_bug_only) {
+        if(RESULT  != 10)
+            cout << "No output asserted in " << nframes << " frames.\n";
+    }
+    else if(RESULT  == 10)
         cout << "result: unsafe\n";
     else if(RESULT  == 20)
         cout << "result: safe\n";
@@ -123,6 +132,7 @@ int main(int argc, char **argv){
     auto t_end = system_clock::now();
     auto duration = duration_cast<microseconds>(t_end - t_begin);
     double time_in_sec = double(duration.count()) * microseconds::period::num / microseconds::period::den;
-    if(!find_bug_only) cout << "time = "<< time_in_sec << "s\n";
+    if(!find_bug_only || RESULT  != 10) 
+        cout << "time = "<< time_in_sec << "s\n";
     return 0;
 }

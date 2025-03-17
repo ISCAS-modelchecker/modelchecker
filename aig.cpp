@@ -146,12 +146,12 @@ void encode (string& str, unsigned x){
 }
 
 
-Aiger* load_aiger_from_file(string str, int pi, bool witness, bool certificate, bool fingbug, bool log){
+Aiger* load_aiger_from_file(string str, int pi, bool witness, bool certificate, bool findbug, bool log){
     Aiger *aiger = new Aiger;
     aiger->propertyIndex = pi;
     aiger->output_witness = witness;
     aiger->output_certificate = certificate;
-    aiger->find_bug_only = fingbug;
+    aiger->find_bug_only = findbug;
     aiger->moreinfo_for_bmc = log;
     
     ifstream fin(str);

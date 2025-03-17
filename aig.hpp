@@ -96,4 +96,4 @@ public:
     void translate_to_dimacs();
 };
 
-Aiger* load_aiger_from_file(string str, int pi, bool witness, bool certificate, bool fingbug, bool log);
+Aiger* load_aiger_from_file(string str, int pi, bool witness, bool certificate, bool findbug, bool log);
