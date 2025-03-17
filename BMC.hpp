@@ -108,7 +108,7 @@ public:
     int thread_index;
     int max_thread_index;
 
-    BMC(Aiger *aiger, int nframes, int Thread_index, int max): Aiger(*aiger), nframes(nframes), thread_index(Thread_index), max_thread_index(max){
+    BMC(Aiger *aiger, int nframes, int index, int max): Aiger(*aiger), nframes(nframes), thread_index(index), max_thread_index(max){
         start_time = std::chrono::steady_clock::now();  
         check_init = 0;
         max_index_of_ands_added_to_solver =0;

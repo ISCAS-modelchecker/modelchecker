@@ -66,6 +66,7 @@ public:
     int num_ands;          // the number of ands
     int num_bads;          // the number of bads, not hope to hold for any step.
     int num_constraints;   // the number of constraints, holds for all the time span.
+    int num_property;      // num_property = (aiger->num_bads > 0 ? aiger->num_bads : aiger->num_outputs)
     // TODO: apply for justice & fairness
     int num_justice;       // the number of justices.
     int num_fairness;      // the number of fairness.
@@ -84,7 +85,7 @@ public:
     vector<int> constraints, constraints_prime;
     vector<int> allbad;
     int bad, bad_prime, propertyIndex;
-    bool output_witness, output_certificate;
+    bool output_witness, output_certificate, find_bug_only, moreinfo_for_bmc;
 
     //for ic3base
     map<int, int> map_to_prime, map_to_unprime; // used for mapping ands
@@ -95,4 +96,4 @@ public:
     void translate_to_dimacs();
 };
 
-Aiger* load_aiger_from_file(string str, int pi, bool witness, bool certificate);
+Aiger* load_aiger_from_file(string str, int pi, bool witness, bool certificate, bool fingbug, bool log);

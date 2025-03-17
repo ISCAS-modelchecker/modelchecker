@@ -80,20 +80,22 @@ void Aiger::translate_to_dimacs(){
             cerr << "Warning: property_index out of range (must be between 0 and " << num_bads - 1 << "). Setting to 0." << std::endl;
             propertyIndex = 0;
         }
-        bad = aiger_to_dimacs(Aiger_bads[propertyIndex]); 
         for(int i=0; i<num_bads; i++){
             allbad.push_back(aiger_to_dimacs(Aiger_bads[i]));
         }
+        bad = allbad[propertyIndex]; // bad = aiger_to_dimacs(Aiger_bads[propertyIndex]); 
+        num_property = num_bads;
     }else if(num_outputs > 0){
         cerr << "Warning: The outputs have been regarded as bads as they are not empty." << std::endl;
         if (num_outputs <= propertyIndex){
             cerr << "Warning: property_index out of range (must be between 0 and " << num_outputs - 1 << "). Setting to 0." << std::endl;
             propertyIndex = 0;
         }        
-        bad = aiger_to_dimacs(Aiger_outputs[propertyIndex]);
         for(int i=0; i<num_outputs; i++){
             allbad.push_back(aiger_to_dimacs(Aiger_outputs[i]));
         }
+        bad = allbad[propertyIndex]; // bad = aiger_to_dimacs(Aiger_bads[propertyIndex]); 
+        num_property = num_outputs;
     }else{
         cerr << "Error: No properties to verify (no bad states or outputs declared in the circuit). Exiting." << std::endl;
         assert(false);
@@ -144,11 +146,13 @@ void encode (string& str, unsigned x){
 }
 
 
-Aiger* load_aiger_from_file(string str, int pi, bool witness, bool certificate){
+Aiger* load_aiger_from_file(string str, int pi, bool witness, bool certificate, bool fingbug, bool log){
     Aiger *aiger = new Aiger;
     aiger->propertyIndex = pi;
     aiger->output_witness = witness;
     aiger->output_certificate = certificate;
+    aiger->find_bug_only = fingbug;
+    aiger->moreinfo_for_bmc = log;
     
     ifstream fin(str);
     fin.seekg(0, ios::end);

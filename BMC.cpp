@@ -226,7 +226,7 @@ void BMC::unfold(){
         (uaiger->constraints).push_back(value(constraints[i]));
     }
     //deal with output
-    int newbad = value(allbad[propertyIndex]);
+    int newbad = find_bug_only ? value(allbad[thread_index]) : value(allbad[propertyIndex]);
     uaiger->outputs.push_back(newbad);       //uaiger->outputs.push_back(value(bad));
     uaiger->nodes[abs(newbad)].fathers++;    //uaiger->nodes[abs(value(bad))].fathers++;
     
@@ -388,7 +388,7 @@ int BMC::solve_one_frame(){
     }
     max_index_of_ands_added_to_solver = (uaiger->ands).size()-1;
 
-    if(bmc_frame_k % max_thread_index != (thread_index-1)) {
+    if(max_thread_index != 1 and bmc_frame_k % max_thread_index != thread_index) {
         bmcSolver->add(-bad); bmcSolver->add(0); 
         return 20;
     }

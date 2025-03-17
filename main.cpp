@@ -9,12 +9,12 @@ int pdr_thread = 0, current_pdr_execution = 0, bmc_thread = 0, current_bmc_execu
 
 void *thread_start_bmc(void *aiger){
     int nframes = INT_MAX;
-    int thread_index = ++current_bmc_execution; //start from 1
+    int thread_index = current_bmc_execution++; //start from 0
     Aiger* aiger_data = ((Aiger *)aiger); 
     BMC bmc(aiger_data, nframes, thread_index, bmc_thread);
     int res_bmc = bmc.check(); 
-    if(moreinfo_for_bmc and res_bmc) 
-        cout << "best configuration: bmc thread " + to_string(thread_index-1) + "\n";
+    if(aiger_data->moreinfo_for_bmc and res_bmc) 
+        cout << "best configuration: bmc thread " + to_string(thread_index) + "\n";
     pthread_exit(NULL); 
 }
 
@@ -33,6 +33,7 @@ int main(int argc, char **argv){
     if (argc == 2 && std::string(argv[1]) == "-h") {
         std::cout << "USAGE: ./modelchecker [OPTIONS] <aig-file>\n\n"
                      "OPTIONS:\n"
+                     "  -findbug                 Run single-threaded BMC for each property and stop if a bug is found. Ignores all other parameters."
                      "  -bmc <bmc_thread>        Set the number of BMC threads (0-12). Default: 0\n"
                      "  -pdr <pdr_thread>        Set the number of PDR threads (0-4). Default: 0\n"
                      "  -pindex <property_index> Specify the property index for verification. Default: 0\n"
@@ -46,10 +47,10 @@ int main(int argc, char **argv){
         return 0;
     }
 
-    cout << "USAGE: ./modelchecker [OPTIONS] <aig-file>\n";
-    cout << "Try './modelchecker -h' for more details.\n";
+    // cout << "USAGE: ./modelchecker [OPTIONS] <aig-file>\n";
+    // cout << "Try './modelchecker -h' for more details.\n";
     int property_index = 0;
-    bool pr = 0, uc = 0, witness = 0, certificate = 0;
+    bool pr = 0, uc = 0, witness = 0, certificate = 0, find_bug_only = 0, log = 0;
     for (int i = 1; i < argc-1; ++i){
         string arg = argv[i];
         if (arg == "-pr")
@@ -60,6 +61,10 @@ int main(int argc, char **argv){
             witness = 1;
         else if (arg == "-certificate")
             certificate = 1;
+        else if (arg == "-findbug")
+            find_bug_only = 1;
+        else if (arg == "-v")
+            log = 1;
         else if (arg == "-bmc" || arg == "-pdr" || arg == "-pindex"){
             if (i + 1 >= argc) {
                 cerr << "Error: Missing value for " << arg << ". Defaulting to 0.\n";
@@ -74,10 +79,22 @@ int main(int argc, char **argv){
                 property_index = validateInput(arg, value, 0, INT_MAX, 0);
         }
     }
-    Aiger *aiger = load_aiger_from_file(string(argv[argc-1]), property_index, witness, certificate);
+    Aiger *aiger = load_aiger_from_file(string(argv[argc-1]), property_index, witness, certificate, find_bug_only, log);
     aiger->translate_to_dimacs();
 
-    if(pdr_thread == 0 and bmc_thread == 0){
+    if(find_bug_only){
+        pthread_t tbug[64];
+        bmc_thread = 1;
+        aiger->output_witness = 1;
+        for(int t = 0; t < aiger->num_property; t++){
+            // aiger->bad = aiger->allbad[t];
+            // aiger->propertyIndex = 0;
+            int ret_bmc = pthread_create (&tbug[t], NULL, thread_start_bmc, (void *)aiger); 
+        }    
+        for(int t = 0; t < aiger->num_property; t++)
+            pthread_join(tbug[t], NULL);    
+    }
+    else if(pdr_thread == 0 and bmc_thread == 0){
         cerr << "Warning: Both -bmc and -pdr thread counts are set to 0. Defaulting to single-threaded PDR." << endl;
         PDR pdr(aiger, -1, uc, pr, 1);
         int res_pdr = pdr.check();  
@@ -97,7 +114,7 @@ int main(int argc, char **argv){
             pthread_join(tbmc[t], NULL);
     }
 
-    if(RESULT  == 10)
+    if(RESULT  == 10 and !find_bug_only)
         cout << "result: unsafe\n";
     else if(RESULT  == 20)
         cout << "result: safe\n";
@@ -106,6 +123,6 @@ int main(int argc, char **argv){
     auto t_end = system_clock::now();
     auto duration = duration_cast<microseconds>(t_end - t_begin);
     double time_in_sec = double(duration.count()) * microseconds::period::num / microseconds::period::den;
-    cout << "time = "<< time_in_sec << "s\n";
+    if(!find_bug_only) cout << "time = "<< time_in_sec << "s\n";
     return 0;
 }
