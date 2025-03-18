@@ -119,20 +119,30 @@ int main(int argc, char **argv){
             pthread_join(tbmc[t], NULL);
     }
 
-    if(find_bug_only) {
+    if(find_bug_only){
+        if(RESULT  != 10)
+            cout << "2" << endl;
+        else if(RESULT  == 10)
+            cout << "1" << endl;
+        else if(RESULT  == 20)
+            cout << "0" << endl;
+    }else{
         if(RESULT  != 10)
             cout << "No output asserted in " << nframes << " frames.\n";
+        else if(RESULT  == 10)
+            cout << "result: unsafe\n";
+        else if(RESULT  == 20)
+            cout << "result: safe\n";
     }
-    else if(RESULT  == 10)
-        cout << "result: unsafe\n";
-    else if(RESULT  == 20)
-        cout << "result: safe\n";
-    
+
     delete aiger;
     auto t_end = system_clock::now();
     auto duration = duration_cast<microseconds>(t_end - t_begin);
     double time_in_sec = double(duration.count()) * microseconds::period::num / microseconds::period::den;
-    if(!find_bug_only || RESULT  != 10) 
-        cout << "time = "<< time_in_sec << "s\n";
+    if(RESULT  != 10){
+        if(!find_bug_only){
+            cout << "time = "<< time_in_sec << "s\n";
+        }
+    } 
     return 0;
 }
